@@ -1,0 +1,153 @@
+use crate::error::{AppError, AppResult};
+use crate::middleware::auth::{require_admin, AuthUser};
+use crate::models::ForumModel;
+use crate::response::ApiResponse;
+use crate::services::cache::CacheService;
+use crate::services::forum::ForumService;
+use axum::{extract::Path, response::IntoResponse, Extension, Json};
+use sea_orm::DatabaseConnection;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateForumRequest {
+    #[validate(length(min = 1, max = 100))]
+    pub name: String,
+    #[validate(length(max = 500))]
+    pub description: String,
+    #[validate(length(min = 1, max = 100))]
+    pub slug: String,
+    pub sort_order: Option<i32>,
+    pub icon_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateForumRequest {
+    #[validate(length(min = 1, max = 100))]
+    pub name: String,
+    #[validate(length(max = 500))]
+    pub description: String,
+    pub sort_order: Option<i32>,
+    pub icon_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ForumResponse {
+    pub id: i32,
+    pub name: String,
+    pub description: String,
+    pub slug: String,
+    pub sort_order: i32,
+    pub icon_url: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<ForumModel> for ForumResponse {
+    fn from(f: ForumModel) -> Self {
+        Self {
+            id: f.id,
+            name: f.name,
+            description: f.description,
+            slug: f.slug,
+            sort_order: f.sort_order,
+            icon_url: f.icon_url,
+            created_at: f.created_at.to_string(),
+            updated_at: f.updated_at.to_string(),
+        }
+    }
+}
+
+fn make_forum_service(db: DatabaseConnection, cache: Option<CacheService>) -> ForumService {
+    let service = ForumService::new(db);
+    match cache {
+        Some(c) => service.with_cache(c),
+        None => service,
+    }
+}
+
+pub async fn list_forums(
+    Extension(db): Extension<DatabaseConnection>,
+    cache: Option<Extension<CacheService>>,
+) -> AppResult<impl IntoResponse> {
+    let service = make_forum_service(db, cache.map(|c| c.0));
+    let forums = service.list().await?;
+    let response: Vec<ForumResponse> = forums.into_iter().map(ForumResponse::from).collect();
+    Ok(ApiResponse::ok(response))
+}
+
+pub async fn get_forum(
+    Extension(db): Extension<DatabaseConnection>,
+    Path(slug): Path<String>,
+) -> AppResult<impl IntoResponse> {
+    let service = ForumService::new(db);
+    let forum = service.get_by_slug(&slug).await?;
+    Ok(ApiResponse::ok(ForumResponse::from(forum)))
+}
+
+pub async fn create_forum(
+    Extension(db): Extension<DatabaseConnection>,
+    cache: Option<Extension<CacheService>>,
+    auth_user: AuthUser,
+    Json(payload): Json<CreateForumRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    require_admin(&db, &auth_user).await?;
+
+    let service = make_forum_service(db, cache.map(|c| c.0));
+    let forum = service
+        .create(
+            &payload.name,
+            &payload.description,
+            &payload.slug,
+            payload.sort_order.unwrap_or(0),
+            payload.icon_url,
+        )
+        .await?;
+
+    Ok(ApiResponse::ok(ForumResponse::from(forum)))
+}
+
+pub async fn update_forum(
+    Extension(db): Extension<DatabaseConnection>,
+    cache: Option<Extension<CacheService>>,
+    auth_user: AuthUser,
+    Path(slug): Path<String>,
+    Json(payload): Json<UpdateForumRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    require_admin(&db, &auth_user).await?;
+
+    let service = make_forum_service(db, cache.map(|c| c.0));
+    let forum = service
+        .update(
+            &slug,
+            &payload.name,
+            &payload.description,
+            payload.sort_order.unwrap_or(0),
+            payload.icon_url,
+        )
+        .await?;
+
+    Ok(ApiResponse::ok(ForumResponse::from(forum)))
+}
+
+pub async fn delete_forum(
+    Extension(db): Extension<DatabaseConnection>,
+    cache: Option<Extension<CacheService>>,
+    auth_user: AuthUser,
+    Path(slug): Path<String>,
+) -> AppResult<impl IntoResponse> {
+    require_admin(&db, &auth_user).await?;
+
+    let service = make_forum_service(db, cache.map(|c| c.0));
+    service.delete(&slug).await?;
+
+    Ok(ApiResponse::ok("Forum deleted"))
+}

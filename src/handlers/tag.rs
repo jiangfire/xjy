@@ -1,0 +1,111 @@
+use crate::error::AppResult;
+use crate::handlers::post::PostResponse;
+use crate::middleware::auth::require_admin;
+use crate::middleware::AuthUser;
+use crate::models::TagModel;
+use crate::response::{ApiResponse, PaginatedResponse};
+use crate::services::tag::TagService;
+use axum::{extract::Path, extract::Query, response::IntoResponse, Extension, Json};
+use sea_orm::DatabaseConnection;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+#[derive(Debug, Serialize)]
+pub struct TagResponse {
+    pub id: i32,
+    pub name: String,
+    pub slug: String,
+}
+
+impl From<TagModel> for TagResponse {
+    fn from(t: TagModel) -> Self {
+        Self {
+            id: t.id,
+            name: t.name,
+            slug: t.slug,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TagPostsQuery {
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
+}
+
+pub async fn list_tags(
+    Extension(db): Extension<DatabaseConnection>,
+) -> AppResult<impl IntoResponse> {
+    let service = TagService::new(db);
+    let tags = service.list_tags().await?;
+    let items: Vec<TagResponse> = tags.into_iter().map(TagResponse::from).collect();
+    Ok(ApiResponse::ok(items))
+}
+
+pub async fn get_posts_by_tag(
+    Extension(db): Extension<DatabaseConnection>,
+    Path(slug): Path<String>,
+    Query(params): Query<TagPostsQuery>,
+) -> AppResult<impl IntoResponse> {
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(20).min(100);
+
+    let service = TagService::new(db);
+    let (posts, total) = service.get_posts_by_tag(&slug, page, per_page).await?;
+    let items: Vec<PostResponse> = posts.into_iter().map(PostResponse::from).collect();
+
+    Ok(ApiResponse::ok(PaginatedResponse::new(
+        items, total, page, per_page,
+    )))
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateTagRequest {
+    #[validate(length(min = 1, max = 30))]
+    pub name: String,
+}
+
+pub async fn create_tag(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Json(payload): Json<CreateTagRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload.validate().map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
+    require_admin(&db, &auth_user).await?;
+
+    let service = TagService::new(db);
+    let tag = service.create_tag(&payload.name).await?;
+    Ok(ApiResponse::ok(TagResponse::from(tag)))
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateTagRequest {
+    #[validate(length(min = 1, max = 30))]
+    pub name: String,
+}
+
+pub async fn update_tag(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(id): Path<i32>,
+    Json(payload): Json<UpdateTagRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload.validate().map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
+    require_admin(&db, &auth_user).await?;
+
+    let service = TagService::new(db);
+    let tag = service.update_tag(id, &payload.name).await?;
+    Ok(ApiResponse::ok(TagResponse::from(tag)))
+}
+
+pub async fn delete_tag(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    require_admin(&db, &auth_user).await?;
+
+    let service = TagService::new(db);
+    service.delete_tag(id).await?;
+    Ok(ApiResponse::ok("Tag deleted successfully"))
+}

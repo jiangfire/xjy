@@ -153,8 +153,6 @@ impl VoteService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn validate_vote_value_accepts_one() {
         let value: i16 = 1;

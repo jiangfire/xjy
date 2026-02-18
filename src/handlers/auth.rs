@@ -1,0 +1,381 @@
+use crate::error::{AppError, AppResult};
+use crate::middleware::auth::parse_user_id;
+use crate::middleware::AuthUser;
+use crate::models::UserModel;
+use crate::response::ApiResponse;
+use crate::services::auth::AuthService;
+use crate::services::email::EmailService;
+use axum::{response::IntoResponse, Extension, Json};
+use sea_orm::DatabaseConnection;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+use utoipa::ToSchema;
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct RegisterRequest {
+    #[validate(length(min = 3, max = 50))]
+    pub username: String,
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 8))]
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthResponse {
+    pub token: String,
+    pub refresh_token: String,
+    pub user_id: i32,
+    pub username: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RegisterResponse {
+    pub token: String,
+    pub refresh_token: String,
+    pub user_id: i32,
+    pub username: String,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UserResponse {
+    pub id: i32,
+    pub username: String,
+    pub email: String,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub karma: i32,
+    pub role: String,
+}
+
+impl From<UserModel> for UserResponse {
+    fn from(user: UserModel) -> Self {
+        Self {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            avatar_url: user.avatar_url,
+            bio: user.bio,
+            karma: user.karma,
+            role: user.role,
+        }
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    request_body = RegisterRequest,
+    responses(
+        (status = 200, description = "User registered successfully", body = RegisterResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 409, description = "Username or email already exists", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn register(
+    Extension(db): Extension<DatabaseConnection>,
+    Extension(email_service): Extension<EmailService>,
+    Json(payload): Json<RegisterRequest>,
+) -> AppResult<impl IntoResponse> {
+    // Validate input
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(format!("Validation error: {e}")))?;
+
+    let service = AuthService::new(db);
+    let (user, access_token, refresh_token) = service
+        .register(&payload.username, &payload.email, &payload.password, &email_service)
+        .await?;
+
+    let response = RegisterResponse {
+        token: access_token,
+        refresh_token,
+        user_id: user.id,
+        username: user.username,
+        message: "Registration successful. Please check your email to verify your account.".to_string(),
+    };
+
+    Ok(ApiResponse::ok(response))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = AuthResponse),
+        (status = 400, description = "Invalid credentials", body = AppError),
+        (status = 401, description = "Account not verified", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn login(
+    Extension(db): Extension<DatabaseConnection>,
+    Json(payload): Json<LoginRequest>,
+) -> AppResult<impl IntoResponse> {
+    let service = AuthService::new(db);
+    let (user, access_token, refresh_token) = service.login(&payload.username, &payload.password).await?;
+
+    let response = AuthResponse {
+        token: access_token,
+        refresh_token,
+        user_id: user.id,
+        username: user.username,
+    };
+
+    Ok(ApiResponse::ok(response))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/me",
+    security(("jwt_token" = [])),
+    responses(
+        (status = 200, description = "Current user retrieved successfully", body = UserResponse),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn get_current_user(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+) -> AppResult<impl IntoResponse> {
+    let user_id = parse_user_id(&auth_user)?;
+
+    let service = AuthService::new(db);
+    let user = service.get_user_by_id(user_id).await?;
+
+    Ok(ApiResponse::ok(UserResponse::from(user)))
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    #[validate(length(min = 8))]
+    pub new_password: String,
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/auth/password",
+    security(("jwt_token" = [])),
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "Password changed successfully", body = String),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn change_password(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    let user_id = parse_user_id(&auth_user)?;
+
+    let service = AuthService::new(db);
+    service
+        .change_password(user_id, &payload.current_password, &payload.new_password)
+        .await?;
+
+    Ok(ApiResponse::ok("Password changed successfully"))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct VerifyEmailRequest {
+    pub token: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/verify-email",
+    request_body = VerifyEmailRequest,
+    responses(
+        (status = 200, description = "Email verified successfully", body = String),
+        (status = 400, description = "Invalid token", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn verify_email(
+    Extension(db): Extension<DatabaseConnection>,
+    Json(payload): Json<VerifyEmailRequest>,
+) -> AppResult<impl IntoResponse> {
+    let service = AuthService::new(db);
+    service.verify_email(&payload.token).await?;
+    Ok(ApiResponse::ok("Email verified successfully"))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/resend-verification",
+    security(("jwt_token" = [])),
+    responses(
+        (status = 200, description = "Verification email sent", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn resend_verification(
+    Extension(db): Extension<DatabaseConnection>,
+    Extension(email_service): Extension<EmailService>,
+    auth_user: AuthUser,
+) -> AppResult<impl IntoResponse> {
+    let user_id = parse_user_id(&auth_user)?;
+
+    let service = AuthService::new(db);
+    service.resend_verification(user_id, &email_service).await?;
+    Ok(ApiResponse::ok(
+        serde_json::json!({ "message": "Verification email sent" }),
+    ))
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct ForgotPasswordRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset email sent if account exists", body = serde_json::Value),
+        (status = 400, description = "Validation error", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn forgot_password(
+    Extension(db): Extension<DatabaseConnection>,
+    Extension(email_service): Extension<EmailService>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    let service = AuthService::new(db);
+    service
+        .forgot_password(&payload.email, &email_service)
+        .await?;
+
+    // Always return success to prevent email enumeration
+    Ok(ApiResponse::ok(
+        serde_json::json!({ "message": "If an account with that email exists, a password reset link has been sent." }),
+    ))
+}
+
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    #[validate(length(min = 8))]
+    pub new_password: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/reset-password",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset successfully", body = serde_json::Value),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 400, description = "Invalid token", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn reset_password(
+    Extension(db): Extension<DatabaseConnection>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    let service = AuthService::new(db);
+    service
+        .reset_password(&payload.token, &payload.new_password)
+        .await?;
+
+    Ok(ApiResponse::ok(
+        serde_json::json!({ "message": "Password has been reset successfully" }),
+    ))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TokenResponse {
+    pub token: String,
+    pub refresh_token: String,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "New access token generated", body = TokenResponse),
+        (status = 401, description = "Invalid or expired refresh token", body = AppError),
+    ),
+    tag = "auth"
+)]
+pub async fn refresh_token(
+    Extension(db): Extension<DatabaseConnection>,
+    Json(payload): Json<RefreshTokenRequest>,
+) -> AppResult<impl IntoResponse> {
+    // Decode the refresh token
+    let claims = crate::utils::jwt::decode_jwt(&payload.refresh_token)?;
+
+    // Verify it's a refresh token
+    if !crate::utils::jwt::is_refresh_token(&claims) {
+        return Err(AppError::Unauthorized);
+    }
+
+    // Get user ID from claims
+    let user_id_str = claims.sub;
+    let user_id: i32 = user_id_str.parse().map_err(|_| AppError::Unauthorized)?;
+
+    // Verify user exists
+    let service = AuthService::new(db);
+    let _user = service.get_user_by_id(user_id).await?;
+
+    // Generate new tokens
+    let new_access_token = crate::utils::jwt::encode_access_token(&user_id_str)?;
+    let new_refresh_token = crate::utils::jwt::encode_refresh_token(&user_id_str)?;
+
+    let response = TokenResponse {
+        token: new_access_token,
+        refresh_token: new_refresh_token,
+    };
+
+    Ok(ApiResponse::ok(response))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    security(("jwt_token" = [])),
+    responses(
+        (status = 200, description = "Logout successful", body = String),
+    ),
+    tag = "auth"
+)]
+pub async fn logout() -> AppResult<impl IntoResponse> {
+    Ok(ApiResponse::ok("Logout successful"))
+}

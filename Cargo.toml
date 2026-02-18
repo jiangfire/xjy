@@ -1,0 +1,67 @@
+[package]
+name = "xjy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web 框架
+axum = { version = "0.8", features = ["ws", "multipart"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+
+# 邮件
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "hostname", "pool"] }
+
+# 内容清洗
+ammonia = "4"
+
+# OpenAPI 文档
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+# utoipa-swagger-ui = "7.1"  # Commented out due to network issues
+
+# 数据库
+sea-orm = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+
+# 认证
+jsonwebtoken = "9"
+bcrypt = "0.16"
+
+# WebSocket
+dashmap = "6"
+futures-util = "0.3"
+
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 异步错误处理
+anyhow = "1"
+thiserror = "2"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# 环境变量
+dotenv = "0.15"
+
+# 缓存
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# 验证
+validator = { version = "0.20", features = ["derive"] }
+
+# 时间处理
+chrono = "0.4"
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# 限流
+tower_governor = "0.8"
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["test-util", "macros"] }

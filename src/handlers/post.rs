@@ -1,0 +1,272 @@
+use crate::error::{AppError, AppResult};
+use crate::middleware::auth::{parse_user_id, require_admin, AuthUser};
+use crate::models::PostModel;
+use crate::response::{ApiResponse, PaginatedResponse};
+use crate::services::post::PostService;
+use crate::services::tag::TagService;
+use axum::{extract::Path, extract::Query, response::IntoResponse, Extension, Json};
+use sea_orm::DatabaseConnection;
+use serde::{Deserialize, Serialize};
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreatePostRequest {
+    pub forum_id: i32,
+    #[validate(length(min = 1, max = 200))]
+    pub title: String,
+    #[validate(length(min = 1))]
+    pub content: String,
+    /// Up to 5 tags, each max 30 characters.
+    pub tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdatePostRequest {
+    #[validate(length(min = 1, max = 200))]
+    pub title: String,
+    #[validate(length(min = 1))]
+    pub content: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PostResponse {
+    pub id: i32,
+    pub user_id: i32,
+    pub forum_id: i32,
+    pub title: String,
+    pub content: String,
+    pub upvotes: i32,
+    pub downvotes: i32,
+    pub view_count: i32,
+    pub is_pinned: bool,
+    pub is_locked: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub tags: Vec<String>,
+}
+
+impl From<PostModel> for PostResponse {
+    fn from(p: PostModel) -> Self {
+        Self {
+            id: p.id,
+            user_id: p.user_id,
+            forum_id: p.forum_id,
+            title: p.title,
+            content: p.content,
+            upvotes: p.upvotes,
+            downvotes: p.downvotes,
+            view_count: p.view_count,
+            is_pinned: p.is_pinned,
+            is_locked: p.is_locked,
+            created_at: p.created_at.to_string(),
+            updated_at: p.updated_at.to_string(),
+            tags: Vec::new(),
+        }
+    }
+}
+
+impl PostResponse {
+    pub fn with_tags(p: PostModel, tags: Vec<String>) -> Self {
+        Self {
+            id: p.id,
+            user_id: p.user_id,
+            forum_id: p.forum_id,
+            title: p.title,
+            content: p.content,
+            upvotes: p.upvotes,
+            downvotes: p.downvotes,
+            view_count: p.view_count,
+            is_pinned: p.is_pinned,
+            is_locked: p.is_locked,
+            created_at: p.created_at.to_string(),
+            updated_at: p.updated_at.to_string(),
+            tags,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PostListQuery {
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
+    /// Sort order: "new" (default), "top", "hot"
+    pub sort: Option<String>,
+}
+
+pub async fn list_posts(
+    Extension(db): Extension<DatabaseConnection>,
+    Path(forum_id): Path<i32>,
+    Query(params): Query<PostListQuery>,
+) -> AppResult<impl IntoResponse> {
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(20).min(100);
+    let sort = params.sort.as_deref().unwrap_or("new");
+
+    let service = PostService::new(db.clone());
+    let (posts, total) = service.list_by_forum(forum_id, page, per_page, sort).await?;
+
+    // Batch-fetch tags for all posts in the page
+    let post_ids: Vec<i32> = posts.iter().map(|p| p.id).collect();
+    let tag_service = TagService::new(db);
+    let tags_map = tag_service.get_tags_for_posts(&post_ids).await?;
+
+    let items: Vec<PostResponse> = posts
+        .into_iter()
+        .map(|p| {
+            let tags = tags_map.get(&p.id).cloned().unwrap_or_default();
+            PostResponse::with_tags(p, tags)
+        })
+        .collect();
+
+    Ok(ApiResponse::ok(PaginatedResponse::new(
+        items, total, page, per_page,
+    )))
+}
+
+pub async fn get_post(
+    Extension(db): Extension<DatabaseConnection>,
+    Path(id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    let service = PostService::new(db.clone());
+    service.increment_view_count(id).await?;
+    let post = service.get_by_id(id).await?;
+
+    let tag_service = TagService::new(db);
+    let tags = tag_service.get_post_tags(id).await?;
+    let tag_names: Vec<String> = tags.into_iter().map(|t| t.name).collect();
+
+    Ok(ApiResponse::ok(PostResponse::with_tags(post, tag_names)))
+}
+
+pub async fn create_post(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Json(payload): Json<CreatePostRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    // Validate tags
+    let tag_names = payload.tags.unwrap_or_default();
+    if tag_names.len() > 5 {
+        return Err(AppError::Validation("Maximum 5 tags allowed".to_string()));
+    }
+    for tag in &tag_names {
+        if tag.trim().is_empty() || tag.len() > 30 {
+            return Err(AppError::Validation(
+                "Each tag must be 1-30 characters".to_string(),
+            ));
+        }
+    }
+
+    let user_id = parse_user_id(&auth_user)?;
+
+    let service = PostService::new(db.clone());
+    let post = service
+        .create(user_id, payload.forum_id, &payload.title, &payload.content)
+        .await?;
+
+    // Assign tags
+    let mut response_tags = Vec::new();
+    if !tag_names.is_empty() {
+        let tag_service = TagService::new(db);
+        let tags = tag_service.get_or_create_tags(tag_names).await?;
+        response_tags = tags.iter().map(|t| t.name.clone()).collect();
+        let tag_ids: Vec<i32> = tags.into_iter().map(|t| t.id).collect();
+        tag_service.set_post_tags(post.id, tag_ids).await?;
+    }
+
+    Ok(ApiResponse::ok(PostResponse::with_tags(post, response_tags)))
+}
+
+pub async fn update_post(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(id): Path<i32>,
+    Json(payload): Json<UpdatePostRequest>,
+) -> AppResult<impl IntoResponse> {
+    payload
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    let user_id = parse_user_id(&auth_user)?;
+
+    let service = PostService::new(db);
+    let post = service
+        .update(id, user_id, &payload.title, &payload.content)
+        .await?;
+
+    Ok(ApiResponse::ok(PostResponse::from(post)))
+}
+
+pub async fn delete_post(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    let user_id = parse_user_id(&auth_user)?;
+
+    let service = PostService::new(db);
+    service.delete(id, user_id).await?;
+
+    Ok(ApiResponse::ok("Post deleted"))
+}
+
+pub async fn pin_post(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    require_admin(&db, &auth_user).await?;
+
+    let service = PostService::new(db);
+    let post = service.toggle_pin(id).await?;
+    Ok(ApiResponse::ok(PostResponse::from(post)))
+}
+
+pub async fn lock_post(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    require_admin(&db, &auth_user).await?;
+
+    let service = PostService::new(db);
+    let post = service.toggle_lock(id).await?;
+    Ok(ApiResponse::ok(PostResponse::from(post)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchPostsQuery {
+    pub q: String,
+    pub forum_id: Option<i32>,
+    pub page: Option<u64>,
+    pub per_page: Option<u64>,
+    /// Sort order: "relevance" (default), "new", "top"
+    pub sort: Option<String>,
+}
+
+pub async fn search_posts(
+    Extension(db): Extension<DatabaseConnection>,
+    Query(params): Query<SearchPostsQuery>,
+) -> AppResult<impl IntoResponse> {
+    let q = params.q.trim();
+    if q.is_empty() || q.len() > 200 {
+        return Err(AppError::Validation(
+            "Search query must be 1-200 characters".to_string(),
+        ));
+    }
+
+    let page = params.page.unwrap_or(1);
+    let per_page = params.per_page.unwrap_or(20).min(100);
+    let sort = params.sort.as_deref().unwrap_or("relevance");
+
+    let service = PostService::new(db);
+    let (posts, total) = service.search(q, params.forum_id, page, per_page, sort).await?;
+    let items = posts.into_iter().map(PostResponse::from).collect();
+
+    Ok(ApiResponse::ok(PaginatedResponse::new(
+        items, total, page, per_page,
+    )))
+}
