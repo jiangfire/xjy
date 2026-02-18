@@ -9,17 +9,17 @@ impl MigrationTrait for Migration {
         let db = manager.get_connection();
 
         db.execute_unprepared(
-            "ALTER TABLE users ADD COLUMN password_reset_token VARCHAR(255) NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(255) NULL",
         )
         .await?;
 
         db.execute_unprepared(
-            "ALTER TABLE users ADD COLUMN password_reset_expires TIMESTAMP NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP NULL",
         )
         .await?;
 
         db.execute_unprepared(
-            "CREATE INDEX idx_users_password_reset_token ON users (password_reset_token) WHERE password_reset_token IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_users_password_reset_token ON users (password_reset_token) WHERE password_reset_token IS NOT NULL",
         )
         .await?;
 

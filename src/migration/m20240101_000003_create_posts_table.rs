@@ -117,6 +117,7 @@ impl MigrationTrait for Migration {
                     .name("idx_posts_forum_id")
                     .table(Posts::Table)
                     .col(Posts::ForumId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await?;
@@ -127,6 +128,7 @@ impl MigrationTrait for Migration {
                     .name("idx_posts_user_id")
                     .table(Posts::Table)
                     .col(Posts::UserId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await

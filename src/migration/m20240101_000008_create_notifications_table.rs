@@ -88,6 +88,7 @@ impl MigrationTrait for Migration {
                     .name("idx_notifications_user_id")
                     .table(Notifications::Table)
                     .col(Notifications::UserId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await?;
@@ -95,7 +96,7 @@ impl MigrationTrait for Migration {
         // Partial index for unread notifications
         let db = manager.get_connection();
         db.execute_unprepared(
-            "CREATE INDEX idx_notifications_unread ON notifications (user_id, is_read) WHERE is_read = FALSE",
+            "CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications (user_id, is_read) WHERE is_read = FALSE",
         )
         .await?;
 

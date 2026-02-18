@@ -18,7 +18,7 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
-        db.execute_unprepared("CREATE INDEX idx_tags_slug ON tags(slug)")
+        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_tags_slug ON tags(slug)")
             .await?;
 
         db.execute_unprepared(
@@ -31,11 +31,11 @@ impl MigrationTrait for Migration {
         .await?;
 
         db.execute_unprepared(
-            "CREATE UNIQUE INDEX idx_post_tags_pair ON post_tags(post_id, tag_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_post_tags_pair ON post_tags(post_id, tag_id)",
         )
         .await?;
 
-        db.execute_unprepared("CREATE INDEX idx_post_tags_tag ON post_tags(tag_id)")
+        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_post_tags_tag ON post_tags(tag_id)")
             .await?;
 
         Ok(())

@@ -9,17 +9,17 @@ impl MigrationTrait for Migration {
         let db = manager.get_connection();
 
         db.execute_unprepared(
-            "ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE",
         )
         .await?;
 
         db.execute_unprepared(
-            "ALTER TABLE users ADD COLUMN email_verification_token VARCHAR(255) NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255) NULL",
         )
         .await?;
 
         db.execute_unprepared(
-            "ALTER TABLE users ADD COLUMN email_verification_expires TIMESTAMP NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_expires TIMESTAMP NULL",
         )
         .await?;
 

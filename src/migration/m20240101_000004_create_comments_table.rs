@@ -103,6 +103,7 @@ impl MigrationTrait for Migration {
                     .name("idx_comments_post_id")
                     .table(Comments::Table)
                     .col(Comments::PostId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await?;
@@ -113,6 +114,7 @@ impl MigrationTrait for Migration {
                     .name("idx_comments_user_id")
                     .table(Comments::Table)
                     .col(Comments::UserId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await

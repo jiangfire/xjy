@@ -86,6 +86,7 @@ impl MigrationTrait for Migration {
                     .name("idx_reports_status")
                     .table(Reports::Table)
                     .col(Reports::Status)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await?;
@@ -97,6 +98,7 @@ impl MigrationTrait for Migration {
                     .table(Reports::Table)
                     .col(Reports::TargetType)
                     .col(Reports::TargetId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await?;
@@ -110,6 +112,7 @@ impl MigrationTrait for Migration {
                     .col(Reports::TargetType)
                     .col(Reports::TargetId)
                     .unique()
+                    .if_not_exists()
                     .to_owned(),
             )
             .await

@@ -61,7 +61,7 @@ impl From<CommentModel> for CommentResponse {
     }
 }
 
-#[derive(Debug, Serialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Clone)]
 pub struct CommentTreeNode {
     pub id: i32,
     pub post_id: i32,
@@ -74,6 +74,46 @@ pub struct CommentTreeNode {
     pub created_at: String,
     pub updated_at: String,
     pub children: Vec<CommentTreeNode>,
+}
+
+impl utoipa::ToSchema for CommentTreeNode {
+    fn name() -> std::borrow::Cow<'static, str> {
+        "CommentTreeNode".into()
+    }
+}
+
+impl utoipa::PartialSchema for CommentTreeNode {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, Schema, Type};
+        utoipa::openapi::RefOr::T(Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(Type::Object)
+                .property("id", i32::schema())
+                .property("post_id", i32::schema())
+                .property("user_id", i32::schema())
+                .property("parent_id", Option::<i32>::schema())
+                .property("content", String::schema())
+                .property("content_html", String::schema())
+                .property("upvotes", i32::schema())
+                .property("downvotes", i32::schema())
+                .property("created_at", String::schema())
+                .property("updated_at", String::schema())
+                .property("children", utoipa::openapi::schema::ArrayBuilder::new()
+                    .items(utoipa::openapi::Ref::from_schema_name("CommentTreeNode"))
+                    .build())
+                .required("id")
+                .required("post_id")
+                .required("user_id")
+                .required("content")
+                .required("content_html")
+                .required("upvotes")
+                .required("downvotes")
+                .required("created_at")
+                .required("updated_at")
+                .required("children")
+                .build(),
+        ))
+    }
 }
 
 impl From<CommentModel> for CommentTreeNode {

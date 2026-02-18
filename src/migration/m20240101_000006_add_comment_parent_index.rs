@@ -18,6 +18,7 @@ impl MigrationTrait for Migration {
                     .name("idx_comments_parent_id")
                     .table(Comments::Table)
                     .col(Comments::ParentId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await

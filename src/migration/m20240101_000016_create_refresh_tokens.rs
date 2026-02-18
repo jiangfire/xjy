@@ -9,7 +9,7 @@ impl MigrationTrait for Migration {
         let db = manager.get_connection();
 
         db.execute_unprepared(
-            "CREATE TABLE refresh_tokens (
+            "CREATE TABLE IF NOT EXISTS refresh_tokens (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 token VARCHAR(255) NOT NULL UNIQUE,
@@ -20,12 +20,12 @@ impl MigrationTrait for Migration {
         .await?;
 
         db.execute_unprepared(
-            "CREATE INDEX idx_refresh_tokens_token ON refresh_tokens (token)",
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens (token)",
         )
         .await?;
 
         db.execute_unprepared(
-            "CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens (user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens (user_id)",
         )
         .await?;
 

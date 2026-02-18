@@ -65,6 +65,7 @@ impl MigrationTrait for Migration {
                     .col(Votes::TargetType)
                     .col(Votes::TargetId)
                     .unique()
+                    .if_not_exists()
                     .to_owned(),
             )
             .await?;
@@ -76,6 +77,7 @@ impl MigrationTrait for Migration {
                     .table(Votes::Table)
                     .col(Votes::TargetType)
                     .col(Votes::TargetId)
+                    .if_not_exists()
                     .to_owned(),
             )
             .await

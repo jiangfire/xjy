@@ -9,12 +9,12 @@ impl MigrationTrait for Migration {
         let db = manager.get_connection();
 
         db.execute_unprepared(
-            "ALTER TABLE posts ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE",
         )
         .await?;
 
         db.execute_unprepared(
-            "ALTER TABLE comments ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE comments ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE",
         )
         .await?;
 

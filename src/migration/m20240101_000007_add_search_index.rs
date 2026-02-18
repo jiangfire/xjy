@@ -10,7 +10,7 @@ impl MigrationTrait for Migration {
 
         // Add generated tsvector column for full-text search
         db.execute_unprepared(
-            "ALTER TABLE posts ADD COLUMN search_vector tsvector \
+            "ALTER TABLE posts ADD COLUMN IF NOT EXISTS search_vector tsvector \
              GENERATED ALWAYS AS (\
                  to_tsvector('english', coalesce(title, '') || ' ' || coalesce(content, ''))\
              ) STORED",
@@ -18,7 +18,7 @@ impl MigrationTrait for Migration {
         .await?;
 
         // Create GIN index for fast full-text search
-        db.execute_unprepared("CREATE INDEX idx_posts_search ON posts USING GIN (search_vector)")
+        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_posts_search ON posts USING GIN (search_vector)")
             .await?;
 
         Ok(())

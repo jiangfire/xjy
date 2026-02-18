@@ -19,11 +19,11 @@ impl MigrationTrait for Migration {
         .await?;
 
         db.execute_unprepared(
-            "CREATE UNIQUE INDEX idx_bookmarks_user_post ON bookmarks(user_id, post_id)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_post ON bookmarks(user_id, post_id)",
         )
         .await?;
 
-        db.execute_unprepared("CREATE INDEX idx_bookmarks_user_id ON bookmarks(user_id)")
+        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
             .await?;
 
         Ok(())
