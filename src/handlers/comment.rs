@@ -6,14 +6,16 @@ use crate::response::ApiResponse;
 use crate::services::comment::CommentService;
 use crate::services::notification::NotificationService;
 use crate::services::post::PostService;
+use crate::utils::render_markdown;
 use crate::websocket::hub::NotificationHub;
 use axum::{extract::Path, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateCommentRequest {
     pub post_id: i32,
     pub parent_id: Option<i32>,
@@ -21,19 +23,20 @@ pub struct CreateCommentRequest {
     pub content: String,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateCommentRequest {
     #[validate(length(min = 1))]
     pub content: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct CommentResponse {
     pub id: i32,
     pub post_id: i32,
     pub user_id: i32,
     pub parent_id: Option<i32>,
     pub content: String,
+    pub content_html: String,
     pub upvotes: i32,
     pub downvotes: i32,
     pub created_at: String,
@@ -42,12 +45,14 @@ pub struct CommentResponse {
 
 impl From<CommentModel> for CommentResponse {
     fn from(c: CommentModel) -> Self {
+        let content_html = render_markdown(&c.content);
         Self {
             id: c.id,
             post_id: c.post_id,
             user_id: c.user_id,
             parent_id: c.parent_id,
             content: c.content,
+            content_html,
             upvotes: c.upvotes,
             downvotes: c.downvotes,
             created_at: c.created_at.to_string(),
@@ -56,13 +61,14 @@ impl From<CommentModel> for CommentResponse {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, ToSchema)]
 pub struct CommentTreeNode {
     pub id: i32,
     pub post_id: i32,
     pub user_id: i32,
     pub parent_id: Option<i32>,
     pub content: String,
+    pub content_html: String,
     pub upvotes: i32,
     pub downvotes: i32,
     pub created_at: String,
@@ -72,12 +78,14 @@ pub struct CommentTreeNode {
 
 impl From<CommentModel> for CommentTreeNode {
     fn from(c: CommentModel) -> Self {
+        let content_html = render_markdown(&c.content);
         Self {
             id: c.id,
             post_id: c.post_id,
             user_id: c.user_id,
             parent_id: c.parent_id,
             content: c.content,
+            content_html,
             upvotes: c.upvotes,
             downvotes: c.downvotes,
             created_at: c.created_at.to_string(),
@@ -127,6 +135,15 @@ fn build_comment_tree(comments: Vec<CommentModel>) -> Vec<CommentTreeNode> {
         .collect()
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts/{post_id}/comments",
+    params(("post_id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Comment tree", body = Vec<CommentTreeNode>),
+    ),
+    tag = "comments"
+)]
 pub async fn list_comments(
     Extension(db): Extension<DatabaseConnection>,
     Path(post_id): Path<i32>,
@@ -137,6 +154,18 @@ pub async fn list_comments(
     Ok(ApiResponse::ok(tree))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/comments",
+    security(("jwt_token" = [])),
+    request_body = CreateCommentRequest,
+    responses(
+        (status = 200, description = "Comment created", body = CommentResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "comments"
+)]
 pub async fn create_comment(
     Extension(db): Extension<DatabaseConnection>,
     Extension(hub): Extension<NotificationHub>,
@@ -196,6 +225,20 @@ pub async fn create_comment(
     Ok(ApiResponse::ok(CommentResponse::from(comment)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/comments/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Comment ID")),
+    request_body = UpdateCommentRequest,
+    responses(
+        (status = 200, description = "Comment updated", body = CommentResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 404, description = "Comment not found", body = AppError),
+    ),
+    tag = "comments"
+)]
 pub async fn update_comment(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -214,6 +257,18 @@ pub async fn update_comment(
     Ok(ApiResponse::ok(CommentResponse::from(comment)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/comments/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Comment ID")),
+    responses(
+        (status = 200, description = "Comment deleted", body = String),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 404, description = "Comment not found", body = AppError),
+    ),
+    tag = "comments"
+)]
 pub async fn delete_comment(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -306,5 +361,14 @@ mod tests {
         assert_eq!(tree.len(), 2);
         assert_eq!(tree[0].children.len(), 1);
         assert_eq!(tree[1].children.len(), 1);
+    }
+
+    #[test]
+    fn content_html_is_rendered() {
+        let mut c = make_comment(1, 1, None);
+        c.content = "**bold** text".to_string();
+        let node = CommentTreeNode::from(c);
+        assert!(node.content_html.contains("<strong>bold</strong>"));
+        assert_eq!(node.content, "**bold** text");
     }
 }

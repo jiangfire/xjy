@@ -8,9 +8,10 @@ use crate::services::tag::TagService;
 use axum::{extract::Path, extract::Query, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct TagResponse {
     pub id: i32,
     pub name: String,
@@ -27,12 +28,20 @@ impl From<TagModel> for TagResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TagPostsQuery {
     pub page: Option<u64>,
     pub per_page: Option<u64>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/tags",
+    responses(
+        (status = 200, description = "List all tags", body = Vec<TagResponse>),
+    ),
+    tag = "tags"
+)]
 pub async fn list_tags(
     Extension(db): Extension<DatabaseConnection>,
 ) -> AppResult<impl IntoResponse> {
@@ -42,6 +51,20 @@ pub async fn list_tags(
     Ok(ApiResponse::ok(items))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/tags/{slug}/posts",
+    params(
+        ("slug" = String, Path, description = "Tag slug"),
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "Posts with this tag", body = PaginatedResponse<PostResponse>),
+        (status = 404, description = "Tag not found", body = crate::error::AppError),
+    ),
+    tag = "tags"
+)]
 pub async fn get_posts_by_tag(
     Extension(db): Extension<DatabaseConnection>,
     Path(slug): Path<String>,
@@ -59,12 +82,24 @@ pub async fn get_posts_by_tag(
     )))
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateTagRequest {
     #[validate(length(min = 1, max = 30))]
     pub name: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/tags",
+    security(("jwt_token" = [])),
+    request_body = CreateTagRequest,
+    responses(
+        (status = 200, description = "Tag created", body = TagResponse),
+        (status = 400, description = "Validation error", body = crate::error::AppError),
+        (status = 403, description = "Admin only", body = crate::error::AppError),
+    ),
+    tag = "tags"
+)]
 pub async fn create_tag(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -78,12 +113,25 @@ pub async fn create_tag(
     Ok(ApiResponse::ok(TagResponse::from(tag)))
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateTagRequest {
     #[validate(length(min = 1, max = 30))]
     pub name: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/tags/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Tag ID")),
+    request_body = UpdateTagRequest,
+    responses(
+        (status = 200, description = "Tag updated", body = TagResponse),
+        (status = 400, description = "Validation error", body = crate::error::AppError),
+        (status = 403, description = "Admin only", body = crate::error::AppError),
+    ),
+    tag = "tags"
+)]
 pub async fn update_tag(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -98,6 +146,17 @@ pub async fn update_tag(
     Ok(ApiResponse::ok(TagResponse::from(tag)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/tags/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Tag ID")),
+    responses(
+        (status = 200, description = "Tag deleted", body = String),
+        (status = 403, description = "Admin only", body = crate::error::AppError),
+    ),
+    tag = "tags"
+)]
 pub async fn delete_tag(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,

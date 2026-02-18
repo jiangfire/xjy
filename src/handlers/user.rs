@@ -7,9 +7,10 @@ use crate::services::user::UserService;
 use axum::{extract::Path, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UserProfileResponse {
     pub id: i32,
     pub username: String,
@@ -32,7 +33,7 @@ impl From<UserModel> for UserProfileResponse {
     }
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateProfileRequest {
     #[validate(length(max = 500))]
     pub bio: Option<String>,
@@ -40,6 +41,16 @@ pub struct UpdateProfileRequest {
     pub avatar_url: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{username}",
+    params(("username" = String, Path, description = "Username")),
+    responses(
+        (status = 200, description = "User profile", body = UserProfileResponse),
+        (status = 404, description = "User not found", body = AppError),
+    ),
+    tag = "users"
+)]
 pub async fn get_user_profile(
     Extension(db): Extension<DatabaseConnection>,
     Path(username): Path<String>,
@@ -49,6 +60,18 @@ pub async fn get_user_profile(
     Ok(ApiResponse::ok(UserProfileResponse::from(user)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/auth/profile",
+    security(("jwt_token" = [])),
+    request_body = UpdateProfileRequest,
+    responses(
+        (status = 200, description = "Profile updated", body = UserProfileResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "users"
+)]
 pub async fn update_profile(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,

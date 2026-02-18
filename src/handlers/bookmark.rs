@@ -7,12 +7,24 @@ use crate::services::bookmark::BookmarkService;
 use axum::{extract::Path, extract::Query, response::IntoResponse, Extension};
 use sea_orm::DatabaseConnection;
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct BookmarkToggleResponse {
     pub bookmarked: bool,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts/{id}/bookmark",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Bookmark toggled", body = BookmarkToggleResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "bookmarks"
+)]
 pub async fn toggle_bookmark(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -24,6 +36,20 @@ pub async fn toggle_bookmark(
     Ok(ApiResponse::ok(BookmarkToggleResponse { bookmarked }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/bookmarks",
+    security(("jwt_token" = [])),
+    params(
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "Bookmarked posts", body = PaginatedResponse<PostResponse>),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "bookmarks"
+)]
 pub async fn list_bookmarks(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,

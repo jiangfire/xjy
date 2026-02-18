@@ -6,15 +6,16 @@ use crate::services::admin::AdminService;
 use axum::{extract::Path, extract::Query, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateRoleRequest {
     #[validate(length(min = 1, max = 20))]
     pub role: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct StatsResponse {
     pub total_users: u64,
     pub total_posts: u64,
@@ -24,7 +25,7 @@ pub struct StatsResponse {
     pub posts_today: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AdminUserResponse {
     pub id: i32,
     pub username: String,
@@ -51,6 +52,16 @@ impl From<UserModel> for AdminUserResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/stats",
+    security(("jwt_token" = [])),
+    responses(
+        (status = 200, description = "Platform statistics", body = StatsResponse),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "admin"
+)]
 pub async fn get_stats(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -70,6 +81,20 @@ pub async fn get_stats(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users",
+    security(("jwt_token" = [])),
+    params(
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "List of users", body = PaginatedResponse<AdminUserResponse>),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "admin"
+)]
 pub async fn list_users(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -89,6 +114,19 @@ pub async fn list_users(
     )))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/users/{id}/role",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "User ID")),
+    request_body = UpdateRoleRequest,
+    responses(
+        (status = 200, description = "User role updated", body = AdminUserResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "admin"
+)]
 pub async fn update_user_role(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -107,6 +145,18 @@ pub async fn update_user_role(
     Ok(ApiResponse::ok(AdminUserResponse::from(user)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/posts/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Post deleted by admin", body = String),
+        (status = 403, description = "Admin only", body = AppError),
+        (status = 404, description = "Post not found", body = AppError),
+    ),
+    tag = "admin"
+)]
 pub async fn admin_delete_post(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -120,6 +170,18 @@ pub async fn admin_delete_post(
     Ok(ApiResponse::ok("Post deleted by admin"))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/comments/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Comment ID")),
+    responses(
+        (status = 200, description = "Comment deleted by admin", body = String),
+        (status = 403, description = "Admin only", body = AppError),
+        (status = 404, description = "Comment not found", body = AppError),
+    ),
+    tag = "admin"
+)]
 pub async fn admin_delete_comment(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,

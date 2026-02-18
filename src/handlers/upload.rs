@@ -7,14 +7,25 @@ use crate::services::user::UserService;
 use axum::{extract::Multipart, response::IntoResponse, Extension};
 use sea_orm::DatabaseConnection;
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UploadResponse {
     pub url: String,
 }
 
-/// Upload and set user avatar.
-/// POST /upload/avatar (multipart form: field "file")
+#[utoipa::path(
+    post,
+    path = "/api/v1/upload/avatar",
+    security(("jwt_token" = [])),
+    responses(
+        (status = 200, description = "Avatar uploaded", body = UploadResponse),
+        (status = 400, description = "Invalid file", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 413, description = "File too large", body = AppError),
+    ),
+    tag = "uploads"
+)]
 pub async fn upload_avatar(
     Extension(db): Extension<DatabaseConnection>,
     Extension(config): Extension<UploadConfig>,
@@ -48,8 +59,18 @@ pub async fn upload_avatar(
     Ok(ApiResponse::ok(UploadResponse { url }))
 }
 
-/// Upload a general image (for posts, comments, etc.).
-/// POST /upload/image (multipart form: field "file")
+#[utoipa::path(
+    post,
+    path = "/api/v1/upload/image",
+    security(("jwt_token" = [])),
+    responses(
+        (status = 200, description = "Image uploaded", body = UploadResponse),
+        (status = 400, description = "Invalid file", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+        (status = 413, description = "File too large", body = AppError),
+    ),
+    tag = "uploads"
+)]
 pub async fn upload_image(
     Extension(config): Extension<UploadConfig>,
     _auth_user: AuthUser,

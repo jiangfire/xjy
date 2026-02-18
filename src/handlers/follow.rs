@@ -7,12 +7,24 @@ use crate::services::follow::FollowService;
 use axum::{extract::Path, extract::Query, response::IntoResponse, Extension};
 use sea_orm::DatabaseConnection;
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct FollowToggleResponse {
     pub following: bool,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/{id}/follow",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "User ID to follow/unfollow")),
+    responses(
+        (status = 200, description = "Follow toggled", body = FollowToggleResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "follows"
+)]
 pub async fn toggle_follow(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -24,6 +36,19 @@ pub async fn toggle_follow(
     Ok(ApiResponse::ok(FollowToggleResponse { following }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}/followers",
+    params(
+        ("id" = i32, Path, description = "User ID"),
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "List of followers", body = PaginatedResponse<UserProfileResponse>),
+    ),
+    tag = "follows"
+)]
 pub async fn list_followers(
     Extension(db): Extension<DatabaseConnection>,
     Path(user_id): Path<i32>,
@@ -40,6 +65,19 @@ pub async fn list_followers(
     )))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}/following",
+    params(
+        ("id" = i32, Path, description = "User ID"),
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "List of following", body = PaginatedResponse<UserProfileResponse>),
+    ),
+    tag = "follows"
+)]
 pub async fn list_following(
     Extension(db): Extension<DatabaseConnection>,
     Path(user_id): Path<i32>,

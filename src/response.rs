@@ -56,7 +56,7 @@ impl<T: Serialize> PaginatedResponse<T> {
         let total_pages = if per_page == 0 {
             0
         } else {
-            (total + per_page - 1) / per_page
+            total.div_ceil(per_page)
         };
         Self {
             items,

@@ -4,12 +4,14 @@ use crate::models::PostModel;
 use crate::response::{ApiResponse, PaginatedResponse};
 use crate::services::post::PostService;
 use crate::services::tag::TagService;
+use crate::utils::render_markdown;
 use axum::{extract::Path, extract::Query, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreatePostRequest {
     pub forum_id: i32,
     #[validate(length(min = 1, max = 200))]
@@ -20,7 +22,7 @@ pub struct CreatePostRequest {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdatePostRequest {
     #[validate(length(min = 1, max = 200))]
     pub title: String,
@@ -28,13 +30,14 @@ pub struct UpdatePostRequest {
     pub content: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PostResponse {
     pub id: i32,
     pub user_id: i32,
     pub forum_id: i32,
     pub title: String,
     pub content: String,
+    pub content_html: String,
     pub upvotes: i32,
     pub downvotes: i32,
     pub view_count: i32,
@@ -47,12 +50,14 @@ pub struct PostResponse {
 
 impl From<PostModel> for PostResponse {
     fn from(p: PostModel) -> Self {
+        let content_html = render_markdown(&p.content);
         Self {
             id: p.id,
             user_id: p.user_id,
             forum_id: p.forum_id,
             title: p.title,
             content: p.content,
+            content_html,
             upvotes: p.upvotes,
             downvotes: p.downvotes,
             view_count: p.view_count,
@@ -67,12 +72,14 @@ impl From<PostModel> for PostResponse {
 
 impl PostResponse {
     pub fn with_tags(p: PostModel, tags: Vec<String>) -> Self {
+        let content_html = render_markdown(&p.content);
         Self {
             id: p.id,
             user_id: p.user_id,
             forum_id: p.forum_id,
             title: p.title,
             content: p.content,
+            content_html,
             upvotes: p.upvotes,
             downvotes: p.downvotes,
             view_count: p.view_count,
@@ -85,7 +92,7 @@ impl PostResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct PostListQuery {
     pub page: Option<u64>,
     pub per_page: Option<u64>,
@@ -93,6 +100,20 @@ pub struct PostListQuery {
     pub sort: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/forums/{forum_id}/posts",
+    params(
+        ("forum_id" = i32, Path, description = "Forum ID"),
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+        ("sort" = Option<String>, Query, description = "Sort order: new, top, hot"),
+    ),
+    responses(
+        (status = 200, description = "List of posts", body = PaginatedResponse<PostResponse>),
+    ),
+    tag = "posts"
+)]
 pub async fn list_posts(
     Extension(db): Extension<DatabaseConnection>,
     Path(forum_id): Path<i32>,
@@ -123,6 +144,16 @@ pub async fn list_posts(
     )))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/posts/{id}",
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Post details", body = PostResponse),
+        (status = 404, description = "Post not found", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn get_post(
     Extension(db): Extension<DatabaseConnection>,
     Path(id): Path<i32>,
@@ -138,6 +169,18 @@ pub async fn get_post(
     Ok(ApiResponse::ok(PostResponse::with_tags(post, tag_names)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts",
+    security(("jwt_token" = [])),
+    request_body = CreatePostRequest,
+    responses(
+        (status = 200, description = "Post created", body = PostResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn create_post(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -180,6 +223,19 @@ pub async fn create_post(
     Ok(ApiResponse::ok(PostResponse::with_tags(post, response_tags)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/posts/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    request_body = UpdatePostRequest,
+    responses(
+        (status = 200, description = "Post updated", body = PostResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn update_post(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -200,6 +256,17 @@ pub async fn update_post(
     Ok(ApiResponse::ok(PostResponse::from(post)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/posts/{id}",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Post deleted", body = String),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn delete_post(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -213,6 +280,17 @@ pub async fn delete_post(
     Ok(ApiResponse::ok("Post deleted"))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/posts/{id}/pin",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Post pin toggled", body = PostResponse),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn pin_post(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -225,6 +303,17 @@ pub async fn pin_post(
     Ok(ApiResponse::ok(PostResponse::from(post)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/posts/{id}/lock",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Post lock toggled", body = PostResponse),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn lock_post(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -237,7 +326,7 @@ pub async fn lock_post(
     Ok(ApiResponse::ok(PostResponse::from(post)))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SearchPostsQuery {
     pub q: String,
     pub forum_id: Option<i32>,
@@ -247,6 +336,22 @@ pub struct SearchPostsQuery {
     pub sort: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/search",
+    params(
+        ("q" = String, Query, description = "Search query"),
+        ("forum_id" = Option<i32>, Query, description = "Filter by forum"),
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+        ("sort" = Option<String>, Query, description = "Sort: relevance, new, top"),
+    ),
+    responses(
+        (status = 200, description = "Search results", body = PaginatedResponse<PostResponse>),
+        (status = 400, description = "Invalid query", body = AppError),
+    ),
+    tag = "posts"
+)]
 pub async fn search_posts(
     Extension(db): Extension<DatabaseConnection>,
     Query(params): Query<SearchPostsQuery>,

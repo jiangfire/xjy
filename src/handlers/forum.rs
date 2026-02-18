@@ -7,9 +7,10 @@ use crate::services::forum::ForumService;
 use axum::{extract::Path, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateForumRequest {
     #[validate(length(min = 1, max = 100))]
     pub name: String,
@@ -21,7 +22,7 @@ pub struct CreateForumRequest {
     pub icon_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateForumRequest {
     #[validate(length(min = 1, max = 100))]
     pub name: String,
@@ -31,7 +32,7 @@ pub struct UpdateForumRequest {
     pub icon_url: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ForumResponse {
     pub id: i32,
     pub name: String,
@@ -66,6 +67,14 @@ fn make_forum_service(db: DatabaseConnection, cache: Option<CacheService>) -> Fo
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/forums",
+    responses(
+        (status = 200, description = "List all forums", body = Vec<ForumResponse>),
+    ),
+    tag = "forums"
+)]
 pub async fn list_forums(
     Extension(db): Extension<DatabaseConnection>,
     cache: Option<Extension<CacheService>>,
@@ -76,6 +85,16 @@ pub async fn list_forums(
     Ok(ApiResponse::ok(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/forums/{slug}",
+    params(("slug" = String, Path, description = "Forum slug")),
+    responses(
+        (status = 200, description = "Forum details", body = ForumResponse),
+        (status = 404, description = "Forum not found", body = AppError),
+    ),
+    tag = "forums"
+)]
 pub async fn get_forum(
     Extension(db): Extension<DatabaseConnection>,
     Path(slug): Path<String>,
@@ -85,6 +104,18 @@ pub async fn get_forum(
     Ok(ApiResponse::ok(ForumResponse::from(forum)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/forums",
+    security(("jwt_token" = [])),
+    request_body = CreateForumRequest,
+    responses(
+        (status = 200, description = "Forum created", body = ForumResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "forums"
+)]
 pub async fn create_forum(
     Extension(db): Extension<DatabaseConnection>,
     cache: Option<Extension<CacheService>>,
@@ -111,6 +142,19 @@ pub async fn create_forum(
     Ok(ApiResponse::ok(ForumResponse::from(forum)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/forums/{slug}",
+    security(("jwt_token" = [])),
+    params(("slug" = String, Path, description = "Forum slug")),
+    request_body = UpdateForumRequest,
+    responses(
+        (status = 200, description = "Forum updated", body = ForumResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "forums"
+)]
 pub async fn update_forum(
     Extension(db): Extension<DatabaseConnection>,
     cache: Option<Extension<CacheService>>,
@@ -138,6 +182,17 @@ pub async fn update_forum(
     Ok(ApiResponse::ok(ForumResponse::from(forum)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/forums/{slug}",
+    security(("jwt_token" = [])),
+    params(("slug" = String, Path, description = "Forum slug")),
+    responses(
+        (status = 200, description = "Forum deleted", body = String),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "forums"
+)]
 pub async fn delete_forum(
     Extension(db): Extension<DatabaseConnection>,
     cache: Option<Extension<CacheService>>,

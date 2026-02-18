@@ -10,19 +10,32 @@ use crate::websocket::hub::NotificationHub;
 use axum::{extract::Path, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct VoteRequest {
     pub value: i16,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct VoteResponse {
     pub target_type: String,
     pub target_id: i32,
     pub value: i16,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/posts/{id}/vote",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    request_body = VoteRequest,
+    responses(
+        (status = 200, description = "Vote recorded", body = VoteResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "votes"
+)]
 pub async fn vote_post(
     Extension(db): Extension<DatabaseConnection>,
     Extension(hub): Extension<NotificationHub>,
@@ -60,6 +73,18 @@ pub async fn vote_post(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/comments/{id}/vote",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Comment ID")),
+    request_body = VoteRequest,
+    responses(
+        (status = 200, description = "Vote recorded", body = VoteResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "votes"
+)]
 pub async fn vote_comment(
     Extension(db): Extension<DatabaseConnection>,
     Extension(hub): Extension<NotificationHub>,

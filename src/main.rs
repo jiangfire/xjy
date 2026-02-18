@@ -22,10 +22,10 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-// use utoipa::OpenApi;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 use websocket::hub::NotificationHub;
 
-/*
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -40,6 +40,7 @@ use websocket::hub::NotificationHub;
         crate::handlers::resend_verification,
         crate::handlers::auth::forgot_password,
         crate::handlers::auth::reset_password,
+        crate::handlers::auth::logout,
         // User routes
         crate::handlers::user::get_user_profile,
         crate::handlers::user::update_profile,
@@ -66,6 +67,9 @@ use websocket::hub::NotificationHub;
         // Tag routes
         crate::handlers::tag::list_tags,
         crate::handlers::tag::get_posts_by_tag,
+        crate::handlers::tag::create_tag,
+        crate::handlers::tag::update_tag,
+        crate::handlers::tag::delete_tag,
         // Vote routes
         crate::handlers::vote::vote_post,
         crate::handlers::vote::vote_comment,
@@ -97,8 +101,11 @@ use websocket::hub::NotificationHub;
     ),
     components(
         schemas(
-            crate::response::ApiResponse,
-            crate::response::PaginatedResponse,
+            crate::response::ApiResponse<serde_json::Value>,
+            crate::response::PaginatedResponse<serde_json::Value>,
+            crate::response::PaginationQuery,
+            crate::error::AppError,
+            // Auth
             crate::handlers::auth::RegisterRequest,
             crate::handlers::auth::LoginRequest,
             crate::handlers::auth::RefreshTokenRequest,
@@ -110,17 +117,48 @@ use websocket::hub::NotificationHub;
             crate::handlers::auth::VerifyEmailRequest,
             crate::handlers::auth::ForgotPasswordRequest,
             crate::handlers::auth::ResetPasswordRequest,
-            crate::models::UserModel,
-            crate::models::ForumModel,
-            crate::models::PostModel,
-            crate::models::CommentModel,
-            crate::models::TagModel,
-            crate::models::VoteModel,
-            crate::models::FollowModel,
-            crate::models::NotificationModel,
-            crate::models::BookmarkModel,
-            crate::models::ReportModel,
-            crate::error::AppError,
+            // User
+            crate::handlers::user::UserProfileResponse,
+            crate::handlers::user::UpdateProfileRequest,
+            // Forum
+            crate::handlers::forum::ForumResponse,
+            crate::handlers::forum::CreateForumRequest,
+            crate::handlers::forum::UpdateForumRequest,
+            // Post
+            crate::handlers::post::PostResponse,
+            crate::handlers::post::CreatePostRequest,
+            crate::handlers::post::UpdatePostRequest,
+            crate::handlers::post::PostListQuery,
+            crate::handlers::post::SearchPostsQuery,
+            // Comment
+            crate::handlers::comment::CommentResponse,
+            crate::handlers::comment::CommentTreeNode,
+            crate::handlers::comment::CreateCommentRequest,
+            crate::handlers::comment::UpdateCommentRequest,
+            // Tag
+            crate::handlers::tag::TagResponse,
+            crate::handlers::tag::CreateTagRequest,
+            crate::handlers::tag::UpdateTagRequest,
+            // Vote
+            crate::handlers::vote::VoteRequest,
+            crate::handlers::vote::VoteResponse,
+            // Follow
+            crate::handlers::follow::FollowToggleResponse,
+            // Notification
+            crate::handlers::notification::NotificationResponse,
+            crate::handlers::notification::UnreadCountResponse,
+            // Bookmark
+            crate::handlers::bookmark::BookmarkToggleResponse,
+            // Upload
+            crate::handlers::upload::UploadResponse,
+            // Report
+            crate::handlers::report::ReportResponse,
+            crate::handlers::report::CreateReportRequest,
+            crate::handlers::report::ResolveReportRequest,
+            // Admin
+            crate::handlers::admin::StatsResponse,
+            crate::handlers::admin::AdminUserResponse,
+            crate::handlers::admin::UpdateRoleRequest,
         )
     ),
     tags(
@@ -140,7 +178,6 @@ use websocket::hub::NotificationHub;
     )
 )]
 struct ApiDoc;
-*/
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -210,6 +247,7 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("Listening on http://{}", addr);
+    tracing::info!("Swagger UI available at http://{}/swagger-ui/", addr);
 
     axum::serve(
         listener,
@@ -273,6 +311,7 @@ fn create_app(upload_dir: &str) -> Router {
     Router::new()
         .route("/", get(health_check))
         .merge(routes::create_routes())
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest_service("/uploads", ServeDir::new(upload_dir))
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())

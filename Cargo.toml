@@ -15,10 +15,11 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 
 # 内容清洗
 ammonia = "4"
+comrak = { version = "0.34", default-features = false }
 
 # OpenAPI 文档
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
-# utoipa-swagger-ui = "7.1"  # Commented out due to network issues
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
 
 # 数据库
 sea-orm = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }

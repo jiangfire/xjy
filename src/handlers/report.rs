@@ -6,9 +6,10 @@ use crate::services::report::ReportService;
 use axum::{extract::Path, extract::Query, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateReportRequest {
     #[validate(length(min = 1, max = 20))]
     pub target_type: String,
@@ -18,20 +19,20 @@ pub struct CreateReportRequest {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ListReportsQuery {
     pub status: Option<String>,
     pub page: Option<u64>,
     pub per_page: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ResolveReportRequest {
     #[validate(length(min = 1, max = 20))]
     pub action: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ReportResponse {
     pub id: i32,
     pub reporter_id: i32,
@@ -62,6 +63,18 @@ impl From<ReportModel> for ReportResponse {
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/reports",
+    security(("jwt_token" = [])),
+    request_body = CreateReportRequest,
+    responses(
+        (status = 200, description = "Report created", body = ReportResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 401, description = "Unauthorized", body = AppError),
+    ),
+    tag = "reports"
+)]
 pub async fn create_report(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -87,6 +100,21 @@ pub async fn create_report(
     Ok(ApiResponse::ok(ReportResponse::from(report)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/reports",
+    security(("jwt_token" = [])),
+    params(
+        ("status" = Option<String>, Query, description = "Filter by status"),
+        ("page" = Option<u64>, Query, description = "Page number"),
+        ("per_page" = Option<u64>, Query, description = "Items per page"),
+    ),
+    responses(
+        (status = 200, description = "List of reports", body = PaginatedResponse<ReportResponse>),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "reports"
+)]
 pub async fn list_reports(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
@@ -108,6 +136,19 @@ pub async fn list_reports(
     )))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/reports/{id}/resolve",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Report ID")),
+    request_body = ResolveReportRequest,
+    responses(
+        (status = 200, description = "Report resolved", body = ReportResponse),
+        (status = 400, description = "Validation error", body = AppError),
+        (status = 403, description = "Admin only", body = AppError),
+    ),
+    tag = "reports"
+)]
 pub async fn resolve_report(
     Extension(db): Extension<DatabaseConnection>,
     auth_user: AuthUser,
