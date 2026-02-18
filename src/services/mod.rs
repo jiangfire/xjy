@@ -1,0 +1,15 @@
+pub mod admin;
+pub mod auth;
+pub mod bookmark;
+pub mod cache;
+pub mod email;
+pub mod follow;
+pub mod comment;
+pub mod forum;
+pub mod notification;
+pub mod post;
+pub mod report;
+pub mod tag;
+pub mod upload;
+pub mod user;
+pub mod vote;
