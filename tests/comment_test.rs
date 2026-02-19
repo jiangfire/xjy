@@ -5,11 +5,11 @@ use serde_json::Value;
 async fn setup(app: &common::TestApp) -> (String, i64) {
     let (user_id, token) = common::create_test_user(app, "commentuser").await;
     common::make_admin(&app.db, user_id).await;
-    common::create_test_forum(app, &token).await;
+    let slug = common::create_test_forum(app, &token).await;
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();

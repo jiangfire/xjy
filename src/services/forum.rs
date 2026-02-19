@@ -46,7 +46,6 @@ impl ForumService {
         Ok(forums)
     }
 
-    #[allow(dead_code)]
     pub async fn get_by_id(&self, id: i32) -> AppResult<ForumModel> {
         Forum::find_by_id(id)
             .one(&self.db)

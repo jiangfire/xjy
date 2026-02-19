@@ -2,6 +2,92 @@ mod common;
 
 use serde_json::Value;
 
+fn find_nonce(pow_token: &str) -> String {
+    let secret = std::env::var("POW_SECRET").unwrap().into_bytes();
+    let ch = xjy::utils::pow::verify_and_decode_challenge(&secret, pow_token).unwrap();
+    for i in 0u64..2_000_000 {
+        let nonce = format!("{i}");
+        if xjy::utils::pow::validate_pow_solution(&ch, &nonce).is_ok() {
+            return nonce;
+        }
+    }
+    panic!("nonce not found");
+}
+
+async fn vote_post_with_pow(
+    app: &common::TestApp,
+    token: &str,
+    post_id: i64,
+    value: i16,
+) -> reqwest::Response {
+    let ch = app
+        .client
+        .post(app.url("/pow/challenge"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "action": "vote",
+            "target_type": "post",
+            "target_id": post_id
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(ch.status(), 200);
+    let ch_body: Value = ch.json().await.unwrap();
+    let pow_token = ch_body["data"]["pow_token"].as_str().unwrap();
+    let pow_nonce = find_nonce(pow_token);
+
+    app.client
+        .post(app.url(&format!("/posts/{}/vote", post_id)))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "value": value,
+            "pow_token": pow_token,
+            "pow_nonce": pow_nonce
+        }))
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn vote_comment_with_pow(
+    app: &common::TestApp,
+    token: &str,
+    comment_id: i64,
+    value: i16,
+) -> reqwest::Response {
+    let ch = app
+        .client
+        .post(app.url("/pow/challenge"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "action": "vote",
+            "target_type": "comment",
+            "target_id": comment_id
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(ch.status(), 200);
+    let ch_body: Value = ch.json().await.unwrap();
+    let pow_token = ch_body["data"]["pow_token"].as_str().unwrap();
+    let pow_nonce = find_nonce(pow_token);
+
+    app.client
+        .post(app.url(&format!("/comments/{}/vote", comment_id)))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "value": value,
+            "pow_token": pow_token,
+            "pow_nonce": pow_nonce
+        }))
+        .send()
+        .await
+        .unwrap()
+}
+
 /// Complete user registration flow: Register → Verify Email → Login → Get Profile
 #[tokio::test]
 async fn complete_user_registration() {
@@ -125,26 +211,12 @@ async fn post_with_comments_and_votes() {
     let comment_id = body["data"]["id"].as_i64().unwrap();
 
     // Vote on post
-    let resp = app
-        .client
-        .post(app.url(&format!("/posts/{}/vote", post_id)))
-        .bearer_auth(&user_token)
-        .json(&serde_json::json!({ "value": 1 }))
-        .send()
-        .await
-        .unwrap();
+    let resp = vote_post_with_pow(&app, &user_token, post_id, 1).await;
 
     assert_eq!(resp.status(), 200);
 
     // Vote on comment
-    let resp = app
-        .client
-        .post(app.url(&format!("/comments/{}/vote", comment_id)))
-        .bearer_auth(&admin_token)
-        .json(&serde_json::json!({ "value": 1 }))
-        .send()
-        .await
-        .unwrap();
+    let resp = vote_comment_with_pow(&app, &admin_token, comment_id, 1).await;
 
     assert_eq!(resp.status(), 200);
 
@@ -326,14 +398,7 @@ async fn social_interaction_workflow() {
     assert_eq!(resp.status(), 200);
 
     // Follower upvotes the post
-    let resp = app
-        .client
-        .post(app.url(&format!("/posts/{}/vote", post_id)))
-        .bearer_auth(&follower_token)
-        .json(&serde_json::json!({ "value": 1 }))
-        .send()
-        .await
-        .unwrap();
+    let resp = vote_post_with_pow(&app, &follower_token, post_id, 1).await;
 
     assert_eq!(resp.status(), 200);
 
@@ -442,22 +507,10 @@ async fn cascade_deletion_verification() {
     let comment_id = body["data"]["id"].as_i64().unwrap();
 
     // Vote on post
-    app.client
-        .post(app.url(&format!("/posts/{}/vote", post_id)))
-        .bearer_auth(&user_token)
-        .json(&serde_json::json!({ "value": 1 }))
-        .send()
-        .await
-        .unwrap();
+    let _ = vote_post_with_pow(&app, &user_token, post_id, 1).await;
 
     // Vote on comment
-    app.client
-        .post(app.url(&format!("/comments/{}/vote", comment_id)))
-        .bearer_auth(&user_token)
-        .json(&serde_json::json!({ "value": 1 }))
-        .send()
-        .await
-        .unwrap();
+    let _ = vote_comment_with_pow(&app, &user_token, comment_id, 1).await;
 
     // Bookmark post
     app.client

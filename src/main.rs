@@ -73,6 +73,8 @@ use websocket::hub::NotificationHub;
         // Vote routes
         crate::handlers::vote::vote_post,
         crate::handlers::vote::vote_comment,
+        // PoW routes
+        crate::handlers::pow::create_pow_challenge,
         // Follow routes
         crate::handlers::follow::list_followers,
         crate::handlers::follow::list_following,
@@ -142,6 +144,9 @@ use websocket::hub::NotificationHub;
             // Vote
             crate::handlers::vote::VoteRequest,
             crate::handlers::vote::VoteResponse,
+            // PoW
+            crate::handlers::pow::PowChallengeRequest,
+            crate::handlers::pow::PowChallengeResponse,
             // Follow
             crate::handlers::follow::FollowToggleResponse,
             // Notification
@@ -169,6 +174,7 @@ use websocket::hub::NotificationHub;
         (name = "comments", description = "Comment management operations"),
         (name = "tags", description = "Tag management operations"),
         (name = "votes", description = "Voting operations"),
+        (name = "pow", description = "Proof-of-work operations"),
         (name = "follows", description = "Follow operations"),
         (name = "notifications", description = "Notification operations"),
         (name = "bookmarks", description = "Bookmark operations"),
@@ -204,6 +210,8 @@ async fn main() -> anyhow::Result<()> {
 
     migration::Migrator::up(&db, None).await?;
     tracing::info!("Database migrations applied successfully");
+
+    services::bootstrap_admin::ensure_bootstrap_admin(&db).await?;
 
     let hub = NotificationHub::new();
 

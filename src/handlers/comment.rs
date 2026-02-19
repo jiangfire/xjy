@@ -331,8 +331,12 @@ pub async fn delete_comment(
 ) -> AppResult<impl IntoResponse> {
     let user_id = parse_user_id(&auth_user)?;
 
-    let service = CommentService::new(db);
+    let service = CommentService::new(db.clone());
     service.delete(id, user_id).await?;
+
+    // 回滚该评论产生的积分（如果有）
+    let points = crate::services::points::PointsService::new(db);
+    let _ = points.rollback_by_ref("comment", id).await;
 
     Ok(ApiResponse::ok("Comment deleted"))
 }

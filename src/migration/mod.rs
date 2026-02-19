@@ -17,6 +17,7 @@ mod m20240101_000014_create_tags_tables;
 mod m20240101_000015_add_password_reset;
 mod m20240101_000016_create_refresh_tokens;
 mod m20240101_000017_add_performance_indexes;
+mod m20260219_000001_create_user_points_ledger;
 
 pub struct Migrator;
 
@@ -41,6 +42,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240101_000015_add_password_reset::Migration),
             Box::new(m20240101_000016_create_refresh_tokens::Migration),
             Box::new(m20240101_000017_add_performance_indexes::Migration),
+            Box::new(m20260219_000001_create_user_points_ledger::Migration),
         ]
     }
 }

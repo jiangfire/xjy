@@ -116,12 +116,19 @@ pub async fn register(
         .register(&payload.username, &payload.email, &payload.password, &email_service)
         .await?;
 
+    let auth_config = crate::config::auth::AuthConfig::from_env();
+    let message = if auth_config.require_email_verification {
+        "Registration successful. Please check your email to verify your account.".to_string()
+    } else {
+        "Registration successful.".to_string()
+    };
+
     let response = RegisterResponse {
         token: access_token,
         refresh_token,
         user_id: user.id,
         username: user.username,
-        message: "Registration successful. Please check your email to verify your account.".to_string(),
+        message,
     };
 
     Ok(ApiResponse::ok(response))

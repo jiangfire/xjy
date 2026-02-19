@@ -51,23 +51,35 @@ impl PostService {
     ) -> AppResult<(Vec<PostModel>, u64)> {
         let offset = page.saturating_sub(1) * per_page;
 
+        let author_weight: f64 = std::env::var("POST_AUTHOR_KARMA_WEIGHT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.2);
+
         let order_clause = match sort {
-            "top" => "is_pinned DESC, (upvotes - downvotes) DESC, created_at DESC",
-            "hot" => "is_pinned DESC, \
-                (upvotes - downvotes)::float / \
-                POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600.0 + 2.0, 1.5) DESC, \
-                created_at DESC",
-            _ => "is_pinned DESC, created_at DESC",
+            "top" => format!(
+                "p.is_pinned DESC, \
+                ((p.upvotes - p.downvotes) + (LN(GREATEST(u.karma, 0) + 1) * {author_weight})) DESC, \
+                p.created_at DESC"
+            ),
+            "hot" => format!(
+                "p.is_pinned DESC, \
+                (((p.upvotes - p.downvotes) + (LN(GREATEST(u.karma, 0) + 1) * {author_weight}))::float / \
+                POWER(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600.0 + 2.0, 1.5)) DESC, \
+                p.created_at DESC"
+            ),
+            _ => "p.is_pinned DESC, p.created_at DESC".to_string(),
         };
 
         let count_sql = "SELECT COUNT(*) as count FROM posts \
             WHERE forum_id = $1 AND is_hidden = FALSE";
 
         let search_sql = format!(
-            "SELECT id, user_id, forum_id, title, content, upvotes, downvotes, \
-                view_count, is_pinned, is_locked, is_hidden, created_at, updated_at \
-                FROM posts \
-                WHERE forum_id = $1 AND is_hidden = FALSE \
+            "SELECT p.id, p.user_id, p.forum_id, p.title, p.content, p.upvotes, p.downvotes, \
+                p.view_count, p.is_pinned, p.is_locked, p.is_hidden, p.created_at, p.updated_at \
+                FROM posts p \
+                JOIN users u ON u.id = p.user_id \
+                WHERE p.forum_id = $1 AND p.is_hidden = FALSE \
                 ORDER BY {} \
                 LIMIT $2 OFFSET $3",
             order_clause
@@ -201,10 +213,19 @@ impl PostService {
     ) -> AppResult<(Vec<PostModel>, u64)> {
         let offset = page.saturating_sub(1) * per_page;
 
+        let author_weight: f64 = std::env::var("POST_AUTHOR_KARMA_WEIGHT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.2);
+
         let order_clause = match sort {
-            "new" => "created_at DESC",
-            "top" => "(upvotes - downvotes) DESC, created_at DESC",
-            _ => "ts_rank(search_vector, plainto_tsquery('english', $1)) DESC",
+            "new" => "p.created_at DESC".to_string(),
+            "top" => format!(
+                "((p.upvotes - p.downvotes) + (LN(GREATEST(u.karma, 0) + 1) * {author_weight})) DESC, p.created_at DESC"
+            ),
+            _ => format!(
+                "(ts_rank(p.search_vector, plainto_tsquery('english', $1)) + (LN(GREATEST(u.karma, 0) + 1) * {author_weight} * 0.05)) DESC"
+            ),
         };
 
         // Build parameterized queries — all values passed via bind params
@@ -213,11 +234,12 @@ impl PostService {
                 WHERE search_vector @@ plainto_tsquery('english', $1) \
                 AND is_hidden = FALSE AND forum_id = $2";
             let search = format!(
-                "SELECT id, user_id, forum_id, title, content, upvotes, downvotes, \
-                    view_count, is_pinned, is_locked, is_hidden, created_at, updated_at \
-                    FROM posts \
-                    WHERE search_vector @@ plainto_tsquery('english', $1) \
-                    AND is_hidden = FALSE AND forum_id = $2 \
+                "SELECT p.id, p.user_id, p.forum_id, p.title, p.content, p.upvotes, p.downvotes, \
+                    p.view_count, p.is_pinned, p.is_locked, p.is_hidden, p.created_at, p.updated_at \
+                    FROM posts p \
+                    JOIN users u ON u.id = p.user_id \
+                    WHERE p.search_vector @@ plainto_tsquery('english', $1) \
+                    AND p.is_hidden = FALSE AND p.forum_id = $2 \
                     ORDER BY {} \
                     LIMIT $3 OFFSET $4",
                 order_clause
@@ -234,11 +256,12 @@ impl PostService {
                 WHERE search_vector @@ plainto_tsquery('english', $1) \
                 AND is_hidden = FALSE";
             let search = format!(
-                "SELECT id, user_id, forum_id, title, content, upvotes, downvotes, \
-                    view_count, is_pinned, is_locked, is_hidden, created_at, updated_at \
-                    FROM posts \
-                    WHERE search_vector @@ plainto_tsquery('english', $1) \
-                    AND is_hidden = FALSE \
+                "SELECT p.id, p.user_id, p.forum_id, p.title, p.content, p.upvotes, p.downvotes, \
+                    p.view_count, p.is_pinned, p.is_locked, p.is_hidden, p.created_at, p.updated_at \
+                    FROM posts p \
+                    JOIN users u ON u.id = p.user_id \
+                    WHERE p.search_vector @@ plainto_tsquery('english', $1) \
+                    AND p.is_hidden = FALSE \
                     ORDER BY {} \
                     LIMIT $2 OFFSET $3",
                 order_clause

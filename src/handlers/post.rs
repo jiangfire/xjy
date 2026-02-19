@@ -226,6 +226,13 @@ pub async fn create_post(
 
     let user_id = parse_user_id(&auth_user)?;
 
+    // Verify forum exists
+    let forum_service = crate::services::forum::ForumService::new(db.clone());
+    forum_service
+        .get_by_id(payload.forum_id)
+        .await
+        .map_err(|_| AppError::Validation("Forum not found".to_string()))?;
+
     let service = PostService::new(db.clone());
     let post = service
         .create(user_id, payload.forum_id, &payload.title, &payload.content)
@@ -295,8 +302,12 @@ pub async fn delete_post(
 ) -> AppResult<impl IntoResponse> {
     let user_id = parse_user_id(&auth_user)?;
 
-    let service = PostService::new(db);
+    let service = PostService::new(db.clone());
     service.delete(id, user_id).await?;
+
+    // 回滚该帖产生的积分（如果有）
+    let points = crate::services::points::PointsService::new(db);
+    let _ = points.rollback_by_ref("post", id).await;
 
     Ok(ApiResponse::ok("Post deleted"))
 }

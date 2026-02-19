@@ -11,7 +11,7 @@ async fn toggle_bookmark() {
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url("/forums/test-forum-0"))
         .send()
         .await
         .unwrap();
@@ -44,7 +44,7 @@ async fn toggle_bookmark() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["data"], "Bookmarked");
+    assert_eq!(body["data"]["bookmarked"].as_bool(), Some(true));
 
     // List bookmarks
     let resp = app
@@ -56,7 +56,7 @@ async fn toggle_bookmark() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
-    let items = body["data"].as_array().unwrap();
+    let items = body["data"]["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
 
     // Bookmark off (toggle)
@@ -69,5 +69,5 @@ async fn toggle_bookmark() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["data"], "Unbookmarked");
+    assert_eq!(body["data"]["bookmarked"].as_bool(), Some(false));
 }

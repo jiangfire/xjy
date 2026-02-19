@@ -1,4 +1,5 @@
 use crate::{
+    config::auth::AuthConfig,
     error::{AppError, AppResult},
     models::User,
     services::email::EmailService,
@@ -10,11 +11,15 @@ use sea_orm::{
 
 pub struct AuthService {
     db: DatabaseConnection,
+    config: AuthConfig,
 }
 
 impl AuthService {
     pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+        Self {
+            db,
+            config: AuthConfig::from_env(),
+        }
     }
 
     /// Register a new user and send verification email.
@@ -35,8 +40,13 @@ impl AuthService {
 
         let password_hash = hash_password(password)?;
         let now = chrono::Utc::now().naive_utc();
-        let verification_token = uuid::Uuid::new_v4().to_string();
-        let verification_expires = now + chrono::Duration::hours(24);
+        let (email_verified, verification_token, verification_expires) = if self.config.require_email_verification {
+            let token = uuid::Uuid::new_v4().to_string();
+            let expires = now + chrono::Duration::hours(24);
+            (false, Some(token), Some(expires))
+        } else {
+            (true, None, None)
+        };
 
         let new_user = crate::models::user::ActiveModel {
             username: sea_orm::ActiveValue::Set(username.to_string()),
@@ -44,11 +54,9 @@ impl AuthService {
             password_hash: sea_orm::ActiveValue::Set(password_hash),
             karma: sea_orm::ActiveValue::Set(0),
             role: sea_orm::ActiveValue::Set("user".to_string()),
-            email_verified: sea_orm::ActiveValue::Set(false),
-            email_verification_token: sea_orm::ActiveValue::Set(Some(
-                verification_token.clone(),
-            )),
-            email_verification_expires: sea_orm::ActiveValue::Set(Some(verification_expires)),
+            email_verified: sea_orm::ActiveValue::Set(email_verified),
+            email_verification_token: sea_orm::ActiveValue::Set(verification_token.clone()),
+            email_verification_expires: sea_orm::ActiveValue::Set(verification_expires),
             created_at: sea_orm::ActiveValue::Set(now),
             updated_at: sea_orm::ActiveValue::Set(now),
             ..Default::default()
@@ -58,12 +66,13 @@ impl AuthService {
         let access_token = encode_access_token(&user.id.to_string())?;
         let refresh_token = encode_refresh_token(&user.id.to_string())?;
 
-        // Send verification email (non-fatal)
-        if let Err(e) = email_service
-            .send_verification_email(&user.email, &verification_token)
-            .await
-        {
-            tracing::warn!("Failed to send verification email: {e}");
+        if self.config.require_email_verification {
+            if let Some(token) = verification_token {
+                // Send verification email (non-fatal)
+                if let Err(e) = email_service.send_verification_email(&user.email, &token).await {
+                    tracing::warn!("Failed to send verification email: {e}");
+                }
+            }
         }
 
         Ok((user, access_token, refresh_token))

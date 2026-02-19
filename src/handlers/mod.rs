@@ -11,5 +11,6 @@ pub mod tag;
 pub mod upload;
 pub mod user;
 pub mod vote;
+pub mod pow;
 
 pub use auth::*;

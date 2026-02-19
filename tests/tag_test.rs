@@ -7,11 +7,11 @@ async fn create_post_with_tags_and_list_tags() {
     let app = common::spawn_app().await;
     let (user_id, token) = common::create_test_user(&app, "taguser").await;
     common::make_admin(&app.db, user_id).await;
-    common::create_test_forum(&app, &token).await;
+    let slug = common::create_test_forum(&app, &token).await;
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();
@@ -67,11 +67,11 @@ async fn too_many_tags_rejected() {
     let app = common::spawn_app().await;
     let (user_id, token) = common::create_test_user(&app, "taguser2").await;
     common::make_admin(&app.db, user_id).await;
-    common::create_test_forum(&app, &token).await;
+    let slug = common::create_test_forum(&app, &token).await;
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();
@@ -92,6 +92,5 @@ async fn too_many_tags_rejected() {
         .send()
         .await
         .unwrap();
-    let body: Value = resp.json().await.unwrap();
-    assert!(!body["success"].as_bool().unwrap_or(true));
+    assert!(resp.status().is_client_error());
 }

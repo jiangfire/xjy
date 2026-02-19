@@ -17,6 +17,10 @@ fn init_env() {
             "JWT_SECRET",
             "integration_test_secret_that_is_at_least_32_characters_long",
         );
+        // PoW: keep low for integration tests and set secret
+        std::env::set_var("POW_SECRET", "integration_test_pow_secret");
+        std::env::set_var("POW_TTL_SECONDS", "300");
+        std::env::set_var("POW_DIFFICULTY", "8");
         let config = xjy::config::jwt::JwtConfig::from_env().unwrap();
         let _ = xjy::utils::jwt::init_jwt_config(config);
     });

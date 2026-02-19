@@ -1,381 +1,355 @@
 # XJY - Rust 论坛后端
 
-基于 Rust 的论坛后端 API，类似 Reddit、V2EX、Bitcoin Forum 的板块论坛系统。
+基于 Rust + Axum + PostgreSQL 的论坛 API，目标是提供类似 Reddit / V2EX 的板块社区后端能力。
+
+## 功能特性
+
+- 认证与账户：注册、登录、刷新 Token、邮箱验证、忘记/重置密码、退出登录
+- 内容系统：板块、帖子、评论（评论树）
+- 社区互动：投票、关注、收藏、通知（REST + WebSocket）
+- 反滥用：投票前置 PoW challenge（`pow_token + pow_nonce`）
+- 内容组织：标签系统（公共查询 + 管理员维护）
+- 审核管理：举报、管理员统计、用户角色管理、删帖删评
+- 工程能力：自动迁移、Swagger/OpenAPI、限流、可选 Redis 缓存、可选 SMTP 邮件
 
 ## 技术栈
 
-- **Web 框架**: Axum 0.8
-- **数据库**: PostgreSQL + SeaORM
-- **认证**: JWT (jsonwebtoken)
-- **异步运行时**: Tokio
-- **缓存**: Redis (可选，优雅降级)
-- **WebSocket**: Axum WS (实时通知)
-- **全文搜索**: PostgreSQL tsvector + GIN 索引
-- **限流**: tower_governor (基于 IP 的三级限流)
-- **文件上传**: Multipart + 本地存储
+- Rust (Edition 2021), Tokio
+- Axum 0.8, tower-http, tower_governor
+- PostgreSQL + SeaORM + SeaORM Migration
+- JWT（Access + Refresh）
+- Redis（可选，连接失败时优雅降级）
+- Utoipa + Swagger UI
 
 ## 项目结构
 
-```
+```text
 xjy/
 ├── src/
-│   ├── main.rs              # 应用入口
-│   ├── lib.rs               # 库入口
-│   ├── config/              # 配置管理
-│   ├── models/              # 数据模型 (SeaORM)
+│   ├── config/              # 配置读取
 │   ├── handlers/            # HTTP 处理器
-│   ├── services/            # 业务逻辑层
-│   ├── middleware/          # 中间件
+│   ├── middleware/          # 认证中间件
 │   ├── migration/           # 数据库迁移
-│   ├── routes/              # 路由定义
-│   ├── websocket/           # WebSocket 处理
-│   ├── error.rs             # 错误类型
-│   ├── response.rs          # 统一响应结构
-│   └── utils/               # 工具函数
-├── docs/                    # 项目文档
-└── .env.example             # 环境变量示例
+│   ├── models/              # SeaORM 模型
+│   ├── routes/              # 路由注册
+│   ├── services/            # 业务逻辑
+│   ├── utils/               # JWT/PoW/Markdown 等工具
+│   ├── websocket/           # WebSocket 通知
+│   ├── main.rs              # 程序入口
+│   └── lib.rs
+├── tests/                   # 集成测试
+├── docs/                    # 设计文档
+├── uploads/                 # 上传文件目录
+├── Cargo.toml
+└── README.md
 ```
 
 ## 快速开始
 
 ### 1. 环境准备
 
-- 安装 [Rust](https://www.rust-lang.org/tools/install) (1.70+)
-- 安装 [PostgreSQL](https://www.postgresql.org/download/) (14+)
+- Rust（稳定版）
+- PostgreSQL 14+
+- Redis（可选）
+- SMTP 服务（可选，仅用于邮件发送）
 
 ### 2. 配置环境变量
 
-复制 `.env.example` 到 `.env` 并修改配置：
+复制模板文件：
+
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
 
 ```bash
+# Linux / macOS
 cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+建议重点配置下列变量：
 
-⚠️ **安全警告**: 生产环境必须使用安全的密钥，不要使用示例值。
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `DATABASE_URL` | 是 | PostgreSQL 连接串 |
+| `JWT_SECRET` | 是 | JWT 密钥，至少 32 个字符 |
+| `JWT_ACCESS_EXPIRATION` | 否 | access token 秒数，默认 `900` |
+| `JWT_REFRESH_EXPIRATION` | 否 | refresh token 秒数，默认 `604800` |
+| `HOST` | 否 | 监听地址，默认 `127.0.0.1` |
+| `PORT` | 否 | 监听端口，默认 `3000` |
+| `UPLOAD_DIR` | 否 | 上传目录，默认 `./uploads` |
+| `REDIS_URL` | 否 | Redis 连接串 |
+| `CORS_ORIGINS` | 否 | 允许来源，`*` 或逗号分隔 |
+| `REQUIRE_EMAIL_VERIFICATION` | 否 | 是否强制邮箱验证，默认 `false` |
+| `POW_SECRET` | 否 | PoW 签名密钥（建议显式配置） |
+| `POW_TTL_SECONDS` | 否 | PoW 有效期秒数，默认 `120` |
+| `POW_DIFFICULTY` | 否 | PoW 难度，默认 `20` |
+| `DB_MAX_CONNECTIONS` | 否 | 连接池最大连接数，默认 `10` |
+| `DB_MIN_CONNECTIONS` | 否 | 连接池最小连接数，默认 `2` |
+| `SMTP_*` | 否 | 邮件发送配置 |
+| `BOOTSTRAP_ADMIN_*` | 否 | 启动时自动创建管理员 |
 
-```bash
-# 生成安全的 JWT 密钥
-openssl rand -hex 32
-```
-
-```env
-DATABASE_URL=postgresql://<username>:<password>@localhost:5432/forum_db
-JWT_SECRET=<使用上面命令生成>
-REDIS_URL=redis://localhost:6379
-UPLOAD_DIR=./uploads
-HOST=127.0.0.1
-PORT=3000
-RUST_LOG=info
-```
+注意：代码读取的是 `JWT_ACCESS_EXPIRATION`；如果只设置 `JWT_EXPIRATION`，会使用默认值。
 
 ### 3. 创建数据库
 
 ```bash
 createdb forum_db
-# 迁移会在启动时自动执行
 ```
 
-### 4. 运行项目
+### 4. 启动服务
 
 ```bash
-# 开发模式
 cargo run
-
-# 生产构建
-cargo build --release
-./target/release/xjy
 ```
 
-服务将在 http://127.0.0.1:3000 启动。
+服务默认地址：`http://127.0.0.1:3000`
 
-## API 端点
+## 文档与健康检查
 
-### 健康检查
+- 健康检查：`GET /`
+- Swagger UI：`GET /swagger-ui/`
+- OpenAPI JSON：`GET /api-docs/openapi.json`
+- WebSocket 通知：`GET /ws?token=<jwt>`
 
+## API 端点概览
+
+以下为当前代码中的主要路由（前缀均为 `/api/v1`）。
+
+### 认证（公开）
+
+```text
+POST /auth/register
+POST /auth/login
+POST /auth/refresh
+POST /auth/verify-email
+POST /auth/forgot-password
+POST /auth/reset-password
 ```
-GET /
+
+### 认证（需登录）
+
+```text
+GET  /auth/me
+POST /auth/logout
+PUT  /auth/profile
+PUT  /auth/password
+POST /auth/resend-verification
 ```
 
-### 认证
+### PoW（需登录）
 
-```
-POST /api/v1/auth/register          # 用户注册 (返回验证 token)
-POST /api/v1/auth/login             # 用户登录
-POST /api/v1/auth/verify-email      # 邮箱验证 (公开, 基于 token)
-GET  /api/v1/auth/me                # 获取当前用户 (需认证)
-PUT  /api/v1/auth/profile           # 更新个人资料 (需认证)
-PUT  /api/v1/auth/password          # 修改密码 (需认证)
-POST /api/v1/auth/resend-verification  # 重新发送验证 (需认证)
+```text
+POST /pow/challenge
 ```
 
-### 用户
+### 用户与关注
 
-```
-GET  /api/v1/users/:username        # 获取用户公开资料
-GET  /api/v1/users/:id/followers    # 获取粉丝列表 (分页)
-GET  /api/v1/users/:id/following    # 获取关注列表 (分页)
-POST /api/v1/users/:id/follow       # 关注/取关 (需认证)
+```text
+GET  /users/{username}
+GET  /users/{id}/followers
+GET  /users/{id}/following
+POST /users/{id}/follow
 ```
 
 ### 板块
 
-```
-GET    /api/v1/forums         # 获取板块列表
-GET    /api/v1/forums/:slug   # 获取板块详情
-POST   /api/v1/forums         # 创建板块 (管理员)
-PUT    /api/v1/forums/:slug   # 更新板块 (管理员)
-DELETE /api/v1/forums/:slug   # 删除板块 (管理员)
+```text
+GET    /forums
+GET    /forums/{slug}
+POST   /forums                  # 管理员
+PUT    /forums/{slug}           # 管理员
+DELETE /forums/{slug}           # 管理员
 ```
 
 ### 帖子
 
-```
-GET    /api/v1/forums/:forum_id/posts  # 获取板块帖子列表 (分页)
-GET    /api/v1/posts/:id               # 获取帖子详情
-POST   /api/v1/posts                   # 创建帖子 (需认证)
-PUT    /api/v1/posts/:id               # 更新帖子 (作者)
-DELETE /api/v1/posts/:id               # 删除帖子 (作者)
-PUT    /api/v1/posts/:id/pin           # 置顶/取消置顶 (管理员)
-PUT    /api/v1/posts/:id/lock          # 锁定/解锁 (管理员)
-POST   /api/v1/posts/:id/vote          # 投票 (需认证)
+```text
+GET    /forums/{forum_id}/posts
+GET    /posts/{id}
+POST   /posts
+PUT    /posts/{id}
+DELETE /posts/{id}
+PUT    /posts/{id}/pin          # 管理员
+PUT    /posts/{id}/lock         # 管理员
 ```
 
 ### 评论
 
-```
-GET    /api/v1/posts/:post_id/comments  # 获取评论树 (嵌套结构)
-POST   /api/v1/comments                 # 创建评论 (需认证, 支持 parent_id)
-PUT    /api/v1/comments/:id             # 更新评论 (作者)
-DELETE /api/v1/comments/:id             # 删除评论 (作者)
-POST   /api/v1/comments/:id/vote        # 投票 (需认证)
+```text
+GET    /posts/{post_id}/comments
+POST   /comments
+PUT    /comments/{id}
+DELETE /comments/{id}
 ```
 
-### 搜索
+### 投票（需登录 + PoW）
 
+```text
+POST /posts/{id}/vote
+POST /comments/{id}/vote
 ```
-GET  /api/v1/search?q=...&forum_id=...&page=...&per_page=...  # 全文搜索帖子
+
+### 搜索与标签
+
+```text
+GET  /search
+GET  /tags
+GET  /tags/{slug}/posts
+POST /admin/tags                # 管理员
+PUT  /admin/tags/{id}           # 管理员
+DELETE /admin/tags/{id}         # 管理员
 ```
 
 ### 通知
 
-```
-GET  /api/v1/notifications                  # 获取通知列表 (需认证, 分页)
-GET  /api/v1/notifications/unread-count     # 获取未读数量 (需认证)
-PUT  /api/v1/notifications/:id/read         # 标记已读 (需认证)
-PUT  /api/v1/notifications/read-all         # 全部标记已读 (需认证)
-```
-
-### 举报
-
-```
-POST /api/v1/reports                        # 创建举报 (需认证)
+```text
+GET /notifications
+GET /notifications/unread-count
+PUT /notifications/{id}/read
+PUT /notifications/read-all
 ```
 
 ### 收藏
 
-```
-POST /api/v1/posts/:id/bookmark             # 收藏/取消收藏 (需认证)
-GET  /api/v1/bookmarks                      # 获取收藏列表 (需认证, 分页)
+```text
+POST /posts/{id}/bookmark
+GET  /bookmarks
 ```
 
-### 文件上传
+### 举报与审核
 
-```
-POST /api/v1/upload/avatar                  # 上传头像 (需认证, multipart)
-POST /api/v1/upload/image                   # 上传图片 (需认证, multipart)
-GET  /uploads/{subdir}/{filename}           # 访问上传文件 (静态服务)
+```text
+POST /reports
+GET  /admin/reports
+PUT  /admin/reports/{id}/resolve
 ```
 
 ### 管理员
 
-```
-GET    /api/v1/admin/stats                  # 系统统计
-GET    /api/v1/admin/users?page=&per_page=  # 用户列表
-PUT    /api/v1/admin/users/:id/role         # 修改用户角色
-DELETE /api/v1/admin/posts/:id              # 删除帖子
-DELETE /api/v1/admin/comments/:id           # 删除评论
-GET    /api/v1/admin/reports?status=&page=  # 举报列表
-PUT    /api/v1/admin/reports/:id/resolve    # 处理举报 (hide/delete/dismiss)
+```text
+GET    /admin/stats
+GET    /admin/users
+PUT    /admin/users/{id}/role
+DELETE /admin/posts/{id}
+DELETE /admin/comments/{id}
 ```
 
-### WebSocket
+### 上传
 
+```text
+POST /upload/avatar
+POST /upload/image
 ```
-GET  /ws?token=<jwt>  # 实时通知推送
-```
 
-## 开发状态
+静态访问上传文件：`GET /uploads/{subdir}/{filename}`
 
-### Phase 1: 基础功能
-- [x] 项目初始化
-- [x] 基础框架搭建
-- [x] 错误处理
-- [x] JWT 工具
-- [x] 用户注册/登录
-- [x] 板块 CRUD
-- [x] 帖子 CRUD
-- [x] 评论系统
-- [x] 数据库迁移 (自动运行)
+## PoW 投票流程
 
-### Phase 2: 社区功能
-- [x] 投票系统
-- [x] 用户资料页
-- [x] 帖子浏览计数
-- [x] 管理员帖子管理 (置顶/锁定)
-- [x] 板块更新/删除
-- [x] 嵌套评论渲染 (树形结构, 深度限制 10 层)
-- [x] 全文搜索 (PostgreSQL tsvector + GIN 索引)
+1. 先请求 challenge：
 
-### Phase 3: 高级功能
-- [x] 实时通知 (WebSocket + REST API)
-- [x] 管理员面板 (统计/用户管理/内容管理)
-- [x] 内容审核 (举报系统 + 隐藏/删除/驳回)
-- [x] 缓存优化 (Redis, 可选, 优雅降级)
-
-### Phase 4: 用户功能 & 基础设施
-- [x] 通用分页响应 (`PaginatedResponse<T>`)
-- [x] 修改密码
-- [x] 邮箱验证 (token 模式)
-- [x] 收藏系统 (toggle + 列表)
-- [x] 关注系统 (toggle + 粉丝/关注列表)
-- [x] 图片/文件上传 (Multipart, 本地存储, 静态服务)
-- [x] 限流 (tower_governor, 三级: auth 5/s, 读 30/s, 写 10/s)
-
-## API 文档
-
-### 认证流程
-
-所有需要认证的端点需要在请求头中包含 JWT token：
-```
+```http
+POST /api/v1/pow/challenge
 Authorization: Bearer <access_token>
 ```
 
-### 请求/响应格式
+请求体示例：
 
-**成功响应**:
 ```json
 {
-  "data": { ... },
-  "total": 100,
-  "page": 1,
-  "limit": 20
+  "action": "vote",
+  "target_type": "post",
+  "target_id": 123
 }
 ```
 
-**错误响应**:
+2. 客户端计算 `pow_nonce` 后，调用投票接口：
+
+```json
+{
+  "value": 1,
+  "pow_token": "...",
+  "pow_nonce": "..."
+}
+```
+
+积分规则：当前实现下，`upvote` 给内容作者 +1 分，记入 `user_points_ledger` 并汇总到 `users.karma`；删除帖子/评论时会尝试回滚相关积分。
+
+## 响应格式
+
+### 成功响应
+
+```json
+{
+  "success": true,
+  "data": {},
+  "message": null
+}
+```
+
+### 分页响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [],
+    "total": 100,
+    "page": 1,
+    "per_page": 20,
+    "total_pages": 5
+  },
+  "message": null
+}
+```
+
+### 错误响应
+
 ```json
 {
   "error": "错误信息"
 }
 ```
 
-### 错误码
+## 限流规则
 
-| 状态码 | 说明 |
-|--------|------|
-| 400 | 请求参数错误 |
-| 401 | 未认证或 token 无效 |
-| 403 | 权限不足 |
-| 404 | 资源不存在 |
-| 409 | 资源冲突 |
-| 429 | 请求过于频繁 |
-| 500 | 服务器错误 |
+- 认证路由：`5 req/s`（burst `10`）
+- 公共读取路由：`30 req/s`（burst `60`）
+- 需认证写入路由：`10 req/s`（burst `20`）
 
-### 限流规则
+## 开发与测试
 
-- 认证端点: 5 req/s
-- 读取端点: 30 req/s
-- 写入端点: 10 req/s
+运行测试前请确保测试数据库可用：
 
-## 安全最佳实践
-
-- **密钥生成**: 使用 `openssl rand -hex 32` 生成 JWT 密钥
-- **HTTPS**: 生产环境必须使用 HTTPS (推荐 Let's Encrypt)
-- **文件上传**: 验证文件类型和大小，防止目录遍历
-- **环境变量**: 永远不要提交 `.env` 文件到版本控制
-- **密钥轮换**: 定期更换密钥和凭证
-- **数据库**: 生产环境启用 PostgreSQL SSL 连接
-
-## 部署指南
-
-### 生产环境配置
-
-**环境变量**:
 ```env
-DATABASE_URL=postgresql://<user>:<pass>@host:5432/db
-JWT_SECRET=<使用 openssl rand -hex 32 生成>
-REDIS_URL=redis://host:6379
-UPLOAD_DIR=/var/www/uploads
-HOST=0.0.0.0
-PORT=3000
-RUST_LOG=info
+TEST_DATABASE_URL=postgresql://username:password@localhost:5432/forum_test_db
 ```
 
-**数据库设置**:
+执行测试：
+
 ```bash
-createdb forum_db
-psql forum_db < schema.sql  # 迁移自动运行
+cargo test
 ```
 
-**Systemd 服务** (`/etc/systemd/system/xjy.service`):
-```ini
-[Unit]
-Description=XJY Forum API
-After=network.target postgresql.service
+如果本地并发测试产生互相干扰，可使用：
 
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/opt/xjy
-EnvironmentFile=/opt/xjy/.env
-ExecStart=/opt/xjy/target/release/xjy
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+```bash
+cargo test -- --test-threads=1
 ```
 
-**Nginx 反向代理** (生产环境需配置 HTTPS):
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name api.example.com;
+## 部署说明
 
-    ssl_certificate /etc/letsencrypt/live/api.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+- 启动时会自动执行数据库迁移（无需手动导入 `schema.sql`）
+- 建议使用反向代理（Nginx/Caddy）并启用 HTTPS
+- 生产环境请使用强随机密钥（JWT/PoW/数据库/SMTP）
+- `uploads` 目录建议挂载独立持久化存储
 
-    # 安全头
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /uploads/ {
-        alias /var/www/uploads/;
-    }
-}
-
-server {
-    listen 80;
-    server_name api.example.com;
-    return 301 https://$server_name$request_uri;
-}
-```
-
-## 文档
+## 参考文档
 
 - [技术栈调研](docs/tech-stack.md)
 - [项目结构说明](docs/project-structure.md)
 
 ## License
 
-MIT
+GNU Affero General Public License v3.0 (AGPL-3.0)。
+详细条款见根目录 LICENSE 文件。

@@ -82,6 +82,9 @@ impl AdminService {
             .ok_or(AppError::NotFound)?;
 
         Post::delete_by_id(post_id).exec(&self.db).await?;
+
+        let points = crate::services::points::PointsService::new(self.db.clone());
+        let _ = points.rollback_by_ref("post", post_id).await;
         Ok(())
     }
 
@@ -92,6 +95,9 @@ impl AdminService {
             .ok_or(AppError::NotFound)?;
 
         Comment::delete_by_id(comment_id).exec(&self.db).await?;
+
+        let points = crate::services::points::PointsService::new(self.db.clone());
+        let _ = points.rollback_by_ref("comment", comment_id).await;
         Ok(())
     }
 }

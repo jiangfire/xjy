@@ -5,7 +5,9 @@ use crate::response::ApiResponse;
 use crate::services::comment::CommentService;
 use crate::services::notification::NotificationService;
 use crate::services::post::PostService;
+use crate::services::points::PointsService;
 use crate::services::vote::VoteService;
+use crate::utils::pow::{validate_pow_solution, verify_and_decode_challenge, PowConfig};
 use crate::websocket::hub::NotificationHub;
 use axum::{extract::Path, response::IntoResponse, Extension, Json};
 use sea_orm::DatabaseConnection;
@@ -16,6 +18,10 @@ use utoipa::ToSchema;
 pub struct VoteRequest {
     /// Vote value: -1 (downvote), 0 (remove vote), 1 (upvote)
     pub value: i16,
+    /// PoW token from /api/v1/pow/challenge
+    pub pow_token: String,
+    /// PoW nonce computed on client
+    pub pow_nonce: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -49,8 +55,38 @@ pub async fn vote_post(
 ) -> AppResult<impl IntoResponse> {
     let user_id = parse_user_id(&auth_user)?;
 
+    // PoW verify (bind to user/action/target)
+    let pow_cfg = PowConfig::from_env()?;
+    let challenge = verify_and_decode_challenge(&pow_cfg.secret, &payload.pow_token)?;
+    if challenge.user_id != user_id
+        || challenge.action != "vote"
+        || challenge.target_type != "post"
+        || challenge.target_id != id
+    {
+        return Err(crate::error::AppError::Validation(
+            "pow_token mismatch".to_string(),
+        ));
+    }
+    validate_pow_solution(&challenge, &payload.pow_nonce)?;
+
     let service = VoteService::new(db.clone());
     let vote = service.vote(user_id, "post", id, payload.value).await?;
+
+    // 积分结算：只对 upvote 计分；取消/点踩不计分（最小策略，后续可扩展）
+    let points_delta = match vote.value {
+        1 => 1,
+        _ => 0,
+    };
+    if points_delta != 0 {
+        let points = PointsService::new(db.clone());
+        // 忽略结算失败，避免影响核心投票流程（可在日志中追踪）
+        if let Err(e) = points
+            .apply_vote_points(user_id, "post", id, points_delta)
+            .await
+        {
+            tracing::warn!("Failed to apply vote points: {:?}", e);
+        }
+    }
 
     // Notify post author on vote (not on toggle-off)
     if vote.value != 0 {
@@ -98,8 +134,37 @@ pub async fn vote_comment(
 ) -> AppResult<impl IntoResponse> {
     let user_id = parse_user_id(&auth_user)?;
 
+    // PoW verify (bind to user/action/target)
+    let pow_cfg = PowConfig::from_env()?;
+    let challenge = verify_and_decode_challenge(&pow_cfg.secret, &payload.pow_token)?;
+    if challenge.user_id != user_id
+        || challenge.action != "vote"
+        || challenge.target_type != "comment"
+        || challenge.target_id != id
+    {
+        return Err(crate::error::AppError::Validation(
+            "pow_token mismatch".to_string(),
+        ));
+    }
+    validate_pow_solution(&challenge, &payload.pow_nonce)?;
+
     let service = VoteService::new(db.clone());
     let vote = service.vote(user_id, "comment", id, payload.value).await?;
+
+    // 积分结算：只对 upvote 计分；取消/点踩不计分（最小策略，后续可扩展）
+    let points_delta = match vote.value {
+        1 => 1,
+        _ => 0,
+    };
+    if points_delta != 0 {
+        let points = PointsService::new(db.clone());
+        if let Err(e) = points
+            .apply_vote_points(user_id, "comment", id, points_delta)
+            .await
+        {
+            tracing::warn!("Failed to apply vote points: {:?}", e);
+        }
+    }
 
     // Notify comment author on vote (not on toggle-off)
     if vote.value != 0 {

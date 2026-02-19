@@ -121,6 +121,11 @@ fn protected_routes() -> Router {
             "/auth/resend-verification",
             routing::post(handlers::resend_verification),
         )
+        // PoW
+        .route(
+            "/pow/challenge",
+            routing::post(handlers::pow::create_pow_challenge),
+        )
         // Forums (admin only - checked in handler)
         .route("/forums", routing::post(handlers::forum::create_forum))
         .route(

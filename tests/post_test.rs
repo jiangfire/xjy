@@ -12,12 +12,12 @@ async fn setup_forum(app: &common::TestApp) -> (String, i32, String) {
 #[tokio::test]
 async fn create_and_get_post() {
     let app = common::spawn_app().await;
-    let (token, _user_id, _slug) = setup_forum(&app).await;
+    let (token, _user_id, slug) = setup_forum(&app).await;
 
     // Get forum_id
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();
@@ -60,11 +60,11 @@ async fn create_and_get_post() {
 #[tokio::test]
 async fn list_posts_with_sorting() {
     let app = common::spawn_app().await;
-    let (token, _user_id, _slug) = setup_forum(&app).await;
+    let (token, _user_id, slug) = setup_forum(&app).await;
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();
@@ -120,11 +120,11 @@ async fn list_posts_with_sorting() {
 #[tokio::test]
 async fn update_and_delete_post() {
     let app = common::spawn_app().await;
-    let (token, _user_id, _slug) = setup_forum(&app).await;
+    let (token, _user_id, slug) = setup_forum(&app).await;
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();
@@ -177,11 +177,11 @@ async fn update_and_delete_post() {
 #[tokio::test]
 async fn wrong_user_cannot_update_post() {
     let app = common::spawn_app().await;
-    let (token, _user_id, _slug) = setup_forum(&app).await;
+    let (token, _user_id, slug) = setup_forum(&app).await;
 
     let resp = app
         .client
-        .get(app.url("/forums/test-forum"))
+        .get(app.url(&format!("/forums/{}", slug)))
         .send()
         .await
         .unwrap();
@@ -219,6 +219,5 @@ async fn wrong_user_cannot_update_post() {
         .send()
         .await
         .unwrap();
-    let body: Value = resp.json().await.unwrap();
-    assert!(!body["success"].as_bool().unwrap_or(true));
+    assert!(resp.status().is_client_error());
 }

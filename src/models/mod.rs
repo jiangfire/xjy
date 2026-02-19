@@ -9,6 +9,7 @@ pub mod refresh_token;
 pub mod report;
 pub mod tag;
 pub mod user;
+pub mod user_points_ledger;
 pub mod vote;
 
 pub use bookmark::Entity as Bookmark;
@@ -24,4 +25,5 @@ pub use refresh_token::Entity as RefreshToken;
 pub use report::{Entity as Report, Model as ReportModel};
 pub use tag::{Entity as Tag, Model as TagModel};
 pub use user::{Entity as User, Model as UserModel};
+pub use user_points_ledger::Entity as UserPointsLedger;
 pub use vote::{Entity as Vote, Model as VoteModel};

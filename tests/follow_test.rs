@@ -18,7 +18,7 @@ async fn toggle_follow() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["data"], "Followed");
+    assert_eq!(body["data"]["following"].as_bool(), Some(true));
 
     // Check followers
     let resp = app
@@ -29,7 +29,7 @@ async fn toggle_follow() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
-    let followers = body["data"].as_array().unwrap();
+    let followers = body["data"]["items"].as_array().unwrap();
     assert_eq!(followers.len(), 1);
 
     // Unfollow (toggle)
@@ -42,7 +42,7 @@ async fn toggle_follow() {
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
-    assert_eq!(body["data"], "Unfollowed");
+    assert_eq!(body["data"]["following"].as_bool(), Some(false));
 }
 
 #[tokio::test]
@@ -57,6 +57,5 @@ async fn self_follow_error() {
         .send()
         .await
         .unwrap();
-    let body: Value = resp.json().await.unwrap();
-    assert!(!body["success"].as_bool().unwrap_or(true));
+    assert!(resp.status().is_client_error());
 }
