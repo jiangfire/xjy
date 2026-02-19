@@ -3,7 +3,7 @@ name = "xjy"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-only"
-license-file = "LICENSE"
+
 [dependencies]
 # Web 框架
 axum = { version = "0.8", features = ["ws", "multipart"] }

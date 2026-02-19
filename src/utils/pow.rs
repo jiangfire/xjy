@@ -30,8 +30,17 @@ pub struct PowConfig {
 
 impl PowConfig {
     pub fn from_env() -> AppResult<Self> {
+        // POW_SECRET is optional: fallback to JWT_SECRET to avoid runtime 500s
+        // when only the required JWT secret is configured.
         let secret = std::env::var("POW_SECRET")
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("POW_SECRET must be set")))?;
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| std::env::var("JWT_SECRET").ok())
+            .ok_or_else(|| {
+                AppError::Internal(anyhow::anyhow!(
+                    "POW_SECRET or JWT_SECRET must be set"
+                ))
+            })?;
 
         let ttl_seconds: i64 = std::env::var("POW_TTL_SECONDS")
             .ok()
@@ -168,6 +177,36 @@ fn has_leading_zero_bits(bytes: &[u8], bits: u8) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, OnceLock};
+
+    struct EnvVarRestore {
+        key: &'static str,
+        value: Option<String>,
+    }
+
+    impl EnvVarRestore {
+        fn new(key: &'static str) -> Self {
+            Self {
+                key,
+                value: std::env::var(key).ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvVarRestore {
+        fn drop(&mut self) {
+            match &self.value {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
     #[test]
     fn leading_zero_bits_works() {
         let a = [0u8; 32];
@@ -183,5 +222,31 @@ mod tests {
         let c = [0x00u8, 0x7Fu8];
         assert!(super::has_leading_zero_bits(&c, 9));
         assert!(!super::has_leading_zero_bits(&c, 10));
+    }
+
+    #[test]
+    fn pow_config_falls_back_to_jwt_secret() {
+        let _guard = env_lock().lock().unwrap();
+        let _pow_restore = EnvVarRestore::new("POW_SECRET");
+        let _jwt_restore = EnvVarRestore::new("JWT_SECRET");
+
+        std::env::remove_var("POW_SECRET");
+        std::env::set_var("JWT_SECRET", "jwt-secret-for-pow");
+
+        let cfg = super::PowConfig::from_env().unwrap();
+        assert_eq!(cfg.secret, b"jwt-secret-for-pow".to_vec());
+    }
+
+    #[test]
+    fn pow_config_prefers_pow_secret_when_present() {
+        let _guard = env_lock().lock().unwrap();
+        let _pow_restore = EnvVarRestore::new("POW_SECRET");
+        let _jwt_restore = EnvVarRestore::new("JWT_SECRET");
+
+        std::env::set_var("POW_SECRET", "pow-secret");
+        std::env::set_var("JWT_SECRET", "jwt-secret");
+
+        let cfg = super::PowConfig::from_env().unwrap();
+        assert_eq!(cfg.secret, b"pow-secret".to_vec());
     }
 }
