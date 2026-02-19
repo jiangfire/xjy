@@ -11,6 +11,7 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct BookmarkToggleResponse {
+    /// Whether post is now bookmarked
     pub bookmarked: bool,
 }
 

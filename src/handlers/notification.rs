@@ -11,13 +11,21 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct NotificationResponse {
+    /// Notification ID
     pub id: i32,
+    /// Notification type
     pub kind: String,
+    /// ID of user who triggered the notification
     pub actor_id: i32,
+    /// Type of target resource
     pub target_type: String,
+    /// ID of target resource
     pub target_id: i32,
+    /// Notification message
     pub message: String,
+    /// Whether notification has been read
     pub is_read: bool,
+    /// Creation timestamp
     pub created_at: String,
 }
 
@@ -38,6 +46,7 @@ impl From<NotificationModel> for NotificationResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UnreadCountResponse {
+    /// Number of unread notifications
     pub count: u64,
 }
 

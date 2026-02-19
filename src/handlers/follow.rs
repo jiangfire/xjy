@@ -11,6 +11,7 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FollowToggleResponse {
+    /// Whether user is now being followed
     pub following: bool,
 }
 

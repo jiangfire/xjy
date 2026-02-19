@@ -13,8 +13,11 @@ use validator::Validate;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TagResponse {
+    /// Tag ID
     pub id: i32,
+    /// Tag name
     pub name: String,
+    /// URL slug
     pub slug: String,
 }
 
@@ -30,7 +33,9 @@ impl From<TagModel> for TagResponse {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct TagPostsQuery {
+    /// Page number
     pub page: Option<u64>,
+    /// Items per page
     pub per_page: Option<u64>,
 }
 
@@ -84,6 +89,7 @@ pub async fn get_posts_by_tag(
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateTagRequest {
+    /// Tag name (1-30 characters)
     #[validate(length(min = 1, max = 30))]
     pub name: String,
 }
@@ -115,6 +121,7 @@ pub async fn create_tag(
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateTagRequest {
+    /// Tag name (1-30 characters)
     #[validate(length(min = 1, max = 30))]
     pub name: String,
 }

@@ -37,6 +37,7 @@ pub enum AppError {
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct ErrorResponse {
+    /// Error message
     pub error: String,
 }
 

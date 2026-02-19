@@ -14,13 +14,17 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct VoteRequest {
+    /// Vote value: -1 (downvote), 0 (remove vote), 1 (upvote)
     pub value: i16,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct VoteResponse {
+    /// Target type (post or comment)
     pub target_type: String,
+    /// Target ID
     pub target_id: i32,
+    /// Current vote value
     pub value: i16,
 }
 

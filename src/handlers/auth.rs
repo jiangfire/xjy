@@ -13,45 +13,66 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct RegisterRequest {
+    /// Username (3-50 characters)
     #[validate(length(min = 3, max = 50))]
     pub username: String,
+    /// Email address
     #[validate(email)]
     pub email: String,
+    /// Password (min 8 characters)
     #[validate(length(min = 8))]
     pub password: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
+    /// Username or email
     pub username: String,
+    /// User password
     pub password: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AuthResponse {
+    /// JWT access token
     pub token: String,
+    /// JWT refresh token
     pub refresh_token: String,
+    /// User ID
     pub user_id: i32,
+    /// Username
     pub username: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct RegisterResponse {
+    /// JWT access token
     pub token: String,
+    /// JWT refresh token
     pub refresh_token: String,
+    /// User ID
     pub user_id: i32,
+    /// Username
     pub username: String,
+    /// Success message
     pub message: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UserResponse {
+    /// User ID
     pub id: i32,
+    /// Username
     pub username: String,
+    /// Email address
     pub email: String,
+    /// Avatar URL
     pub avatar_url: Option<String>,
+    /// User bio/description
     pub bio: Option<String>,
+    /// User karma score
     pub karma: i32,
+    /// User role (user, admin, moderator)
     pub role: String,
 }
 
@@ -158,7 +179,9 @@ pub async fn get_current_user(
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ChangePasswordRequest {
+    /// Current password
     pub current_password: String,
+    /// New password (min 8 characters)
     #[validate(length(min = 8))]
     pub new_password: String,
 }
@@ -196,6 +219,7 @@ pub async fn change_password(
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct VerifyEmailRequest {
+    /// Email verification token
     pub token: String,
 }
 
@@ -244,6 +268,7 @@ pub async fn resend_verification(
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ForgotPasswordRequest {
+    /// Email address
     #[validate(email)]
     pub email: String,
 }
@@ -280,7 +305,9 @@ pub async fn forgot_password(
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ResetPasswordRequest {
+    /// Password reset token
     pub token: String,
+    /// New password (min 8 characters)
     #[validate(length(min = 8))]
     pub new_password: String,
 }
@@ -316,12 +343,15 @@ pub async fn reset_password(
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshTokenRequest {
+    /// Refresh token
     pub refresh_token: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TokenResponse {
+    /// New JWT access token
     pub token: String,
+    /// New JWT refresh token
     pub refresh_token: String,
 }
 

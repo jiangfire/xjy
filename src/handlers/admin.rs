@@ -11,29 +11,44 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateRoleRequest {
+    /// User role (1-20 characters)
     #[validate(length(min = 1, max = 20))]
     pub role: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct StatsResponse {
+    /// Total number of users
     pub total_users: u64,
+    /// Total number of posts
     pub total_posts: u64,
+    /// Total number of comments
     pub total_comments: u64,
+    /// Total number of forums
     pub total_forums: u64,
+    /// Users registered today
     pub users_today: u64,
+    /// Posts created today
     pub posts_today: u64,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AdminUserResponse {
+    /// User ID
     pub id: i32,
+    /// Username
     pub username: String,
+    /// Email address
     pub email: String,
+    /// Avatar URL
     pub avatar_url: Option<String>,
+    /// User bio
     pub bio: Option<String>,
+    /// Karma score
     pub karma: i32,
+    /// User role
     pub role: String,
+    /// Account creation timestamp
     pub created_at: String,
 }
 

@@ -4,8 +4,11 @@ use utoipa::ToSchema;
 
 #[derive(Serialize, ToSchema)]
 pub struct ApiResponse<T> {
+    /// Request success status
     pub success: bool,
+    /// Response data
     pub data: Option<T>,
+    /// Optional message
     pub message: Option<String>,
 }
 
@@ -44,10 +47,15 @@ impl<T: Serialize> ApiResponse<T> {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PaginatedResponse<T: Serialize> {
+    /// Items in current page
     pub items: Vec<T>,
+    /// Total number of items
     pub total: u64,
+    /// Current page number
     pub page: u64,
+    /// Items per page
     pub per_page: u64,
+    /// Total number of pages
     pub total_pages: u64,
 }
 
@@ -70,7 +78,9 @@ impl<T: Serialize> PaginatedResponse<T> {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PaginationQuery {
+    /// Page number
     pub page: Option<u64>,
+    /// Items per page
     pub per_page: Option<u64>,
 }
 

@@ -13,38 +13,57 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreatePostRequest {
+    /// Forum ID
     pub forum_id: i32,
+    /// Post title (1-200 characters)
     #[validate(length(min = 1, max = 200))]
     pub title: String,
+    /// Post content (Markdown supported)
     #[validate(length(min = 1))]
     pub content: String,
-    /// Up to 5 tags, each max 30 characters.
+    /// Tags (up to 5 tags, each max 30 characters)
     pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdatePostRequest {
+    /// Post title (1-200 characters)
     #[validate(length(min = 1, max = 200))]
     pub title: String,
+    /// Post content (Markdown supported)
     #[validate(length(min = 1))]
     pub content: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PostResponse {
+    /// Post ID
     pub id: i32,
+    /// Author user ID
     pub user_id: i32,
+    /// Forum ID
     pub forum_id: i32,
+    /// Post title
     pub title: String,
+    /// Post content (Markdown)
     pub content: String,
+    /// Rendered HTML content
     pub content_html: String,
+    /// Upvote count
     pub upvotes: i32,
+    /// Downvote count
     pub downvotes: i32,
+    /// View count
     pub view_count: i32,
+    /// Whether post is pinned
     pub is_pinned: bool,
+    /// Whether post is locked (no new comments)
     pub is_locked: bool,
+    /// Creation timestamp
     pub created_at: String,
+    /// Last update timestamp
     pub updated_at: String,
+    /// Post tags
     pub tags: Vec<String>,
 }
 
@@ -94,9 +113,11 @@ impl PostResponse {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PostListQuery {
+    /// Page number
     pub page: Option<u64>,
+    /// Items per page
     pub per_page: Option<u64>,
-    /// Sort order: "new" (default), "top", "hot"
+    /// Sort order: new, top, hot
     pub sort: Option<String>,
 }
 
@@ -328,11 +349,15 @@ pub async fn lock_post(
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SearchPostsQuery {
+    /// Search query
     pub q: String,
+    /// Filter by forum ID
     pub forum_id: Option<i32>,
+    /// Page number
     pub page: Option<u64>,
+    /// Items per page
     pub per_page: Option<u64>,
-    /// Sort order: "relevance" (default), "new", "top"
+    /// Sort order: relevance, new, top
     pub sort: Option<String>,
 }
 

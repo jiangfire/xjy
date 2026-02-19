@@ -11,6 +11,7 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UploadResponse {
+    /// URL of the uploaded file
     pub url: String,
 }
 

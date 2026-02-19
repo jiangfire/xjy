@@ -11,38 +11,56 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateReportRequest {
+    /// Target type (post or comment)
     #[validate(length(min = 1, max = 20))]
     pub target_type: String,
+    /// Target ID
     pub target_id: i32,
+    /// Report reason (1-50 characters)
     #[validate(length(min = 1, max = 50))]
     pub reason: String,
+    /// Detailed description
     pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ListReportsQuery {
+    /// Filter by status
     pub status: Option<String>,
+    /// Page number
     pub page: Option<u64>,
+    /// Items per page
     pub per_page: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ResolveReportRequest {
+    /// Action taken (1-20 characters)
     #[validate(length(min = 1, max = 20))]
     pub action: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ReportResponse {
+    /// Report ID
     pub id: i32,
+    /// Reporter user ID
     pub reporter_id: i32,
+    /// Target type
     pub target_type: String,
+    /// Target ID
     pub target_id: i32,
+    /// Report reason
     pub reason: String,
+    /// Detailed description
     pub description: Option<String>,
+    /// Report status
     pub status: String,
+    /// Admin user ID who resolved
     pub resolved_by: Option<i32>,
+    /// Resolution timestamp
     pub resolved_at: Option<String>,
+    /// Creation timestamp
     pub created_at: String,
 }
 

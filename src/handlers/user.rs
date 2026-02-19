@@ -12,11 +12,17 @@ use validator::Validate;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UserProfileResponse {
+    /// User ID
     pub id: i32,
+    /// Username
     pub username: String,
+    /// Avatar URL
     pub avatar_url: Option<String>,
+    /// User bio/description
     pub bio: Option<String>,
+    /// User karma score
     pub karma: i32,
+    /// Account creation timestamp
     pub created_at: String,
 }
 
@@ -35,8 +41,10 @@ impl From<UserModel> for UserProfileResponse {
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateProfileRequest {
+    /// User bio/description (max 500 characters)
     #[validate(length(max = 500))]
     pub bio: Option<String>,
+    /// Avatar URL (max 500 characters)
     #[validate(length(max = 500))]
     pub avatar_url: Option<String>,
 }

@@ -17,29 +17,43 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateCommentRequest {
+    /// Post ID
     pub post_id: i32,
+    /// Parent comment ID (null for top-level comment)
     pub parent_id: Option<i32>,
+    /// Comment content (Markdown supported)
     #[validate(length(min = 1))]
     pub content: String,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateCommentRequest {
+    /// Comment content (Markdown supported)
     #[validate(length(min = 1))]
     pub content: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct CommentResponse {
+    /// Comment ID
     pub id: i32,
+    /// Post ID
     pub post_id: i32,
+    /// Author user ID
     pub user_id: i32,
+    /// Parent comment ID (null for top-level)
     pub parent_id: Option<i32>,
+    /// Comment content (Markdown)
     pub content: String,
+    /// Rendered HTML content
     pub content_html: String,
+    /// Upvote count
     pub upvotes: i32,
+    /// Downvote count
     pub downvotes: i32,
+    /// Creation timestamp
     pub created_at: String,
+    /// Last update timestamp
     pub updated_at: String,
 }
 
@@ -111,6 +125,7 @@ impl utoipa::PartialSchema for CommentTreeNode {
                 .required("created_at")
                 .required("updated_at")
                 .required("children")
+                .description(Some("Comment node in tree structure with nested children"))
                 .build(),
         ))
     }

@@ -12,35 +12,52 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateForumRequest {
+    /// Forum name (1-100 characters)
     #[validate(length(min = 1, max = 100))]
     pub name: String,
+    /// Forum description (max 500 characters)
     #[validate(length(max = 500))]
     pub description: String,
+    /// URL slug (1-100 characters)
     #[validate(length(min = 1, max = 100))]
     pub slug: String,
+    /// Display sort order
     pub sort_order: Option<i32>,
+    /// Icon URL
     pub icon_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct UpdateForumRequest {
+    /// Forum name (1-100 characters)
     #[validate(length(min = 1, max = 100))]
     pub name: String,
+    /// Forum description (max 500 characters)
     #[validate(length(max = 500))]
     pub description: String,
+    /// Display sort order
     pub sort_order: Option<i32>,
+    /// Icon URL
     pub icon_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ForumResponse {
+    /// Forum ID
     pub id: i32,
+    /// Forum name
     pub name: String,
+    /// Forum description
     pub description: String,
+    /// URL slug
     pub slug: String,
+    /// Display sort order
     pub sort_order: i32,
+    /// Icon URL
     pub icon_url: Option<String>,
+    /// Creation timestamp
     pub created_at: String,
+    /// Last update timestamp
     pub updated_at: String,
 }
 
