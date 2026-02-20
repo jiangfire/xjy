@@ -87,4 +87,3 @@ pub async fn ensure_bootstrap_admin(db: &DatabaseConnection) -> AppResult<()> {
     new_user.insert(db).await?;
     Ok(())
 }
-

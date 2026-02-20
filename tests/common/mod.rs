@@ -4,7 +4,10 @@ use reqwest::Client;
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use sea_orm_migration::MigratorTrait;
 use std::net::SocketAddr;
-use std::sync::{Once, atomic::{AtomicBool, AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Once,
+};
 
 static INIT: Once = Once::new();
 static MIGRATIONS_RAN: AtomicBool = AtomicBool::new(false);
@@ -68,6 +71,9 @@ pub async fn spawn_app() -> TestApp {
     let app = axum::Router::new()
         .route("/", axum::routing::get(|| async { "ok" }))
         .merge(xjy::routes::create_routes())
+        .layer(axum::middleware::from_fn(
+            xjy::middleware::security::security_headers_middleware,
+        ))
         .layer(axum::extract::Extension(db.clone()))
         .layer(axum::extract::Extension(hub))
         .layer(axum::extract::Extension(upload_config))
@@ -146,21 +152,29 @@ pub async fn create_test_user(app: &TestApp, username_prefix: &str) -> (i32, Str
 
     let status = resp.status();
     let body: serde_json::Value = resp.json().await.unwrap_or_else(|e| {
-        panic!("Failed to parse register response for user '{}': status={}, error={}",
-               unique_username, status, e);
+        panic!(
+            "Failed to parse register response for user '{}': status={}, error={}",
+            unique_username, status, e
+        );
     });
 
     if !body["success"].as_bool().unwrap_or(false) {
-        panic!("Failed to register user '{}': status={}, body={}",
-               unique_username, status, body);
+        panic!(
+            "Failed to register user '{}': status={}, body={}",
+            unique_username, status, body
+        );
     }
 
-    let user_id = body["data"]["user_id"]
-        .as_i64()
-        .expect(&format!("Response missing user_id for user '{}': {:?}", unique_username, body)) as i32;
+    let user_id = body["data"]["user_id"].as_i64().expect(&format!(
+        "Response missing user_id for user '{}': {:?}",
+        unique_username, body
+    )) as i32;
     let token = body["data"]["token"]
         .as_str()
-        .expect(&format!("Response missing token for user '{}': {:?}", unique_username, body))
+        .expect(&format!(
+            "Response missing token for user '{}': {:?}",
+            unique_username, body
+        ))
         .to_string();
     (user_id, token)
 }

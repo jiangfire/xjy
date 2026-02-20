@@ -1,3 +1,4 @@
+use crate::config::rate_limit::{RateLimitConfig, RateLimitRule};
 use crate::handlers;
 use crate::middleware::auth::auth_middleware;
 use crate::websocket;
@@ -12,30 +13,26 @@ pub fn create_routes() -> Router {
 }
 
 fn api_routes() -> Router {
-    let auth = auth_routes();
-    let public_read = public_read_routes();
-    let protected = protected_routes().layer(middleware::from_fn(auth_middleware));
+    let rate_limit_config = RateLimitConfig::from_env();
+
+    let auth = auth_routes(&rate_limit_config);
+    let public_read = public_read_routes(&rate_limit_config);
+    let protected =
+        protected_routes(&rate_limit_config).layer(middleware::from_fn(auth_middleware));
 
     auth.merge(public_read).merge(protected)
 }
 
 /// Auth routes: register, login, verify-email.
-/// Rate limit: 5 req/s, burst 10.
-fn auth_routes() -> Router {
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_second(5)
-        .burst_size(10)
-        .finish()
-        .unwrap();
-
-    Router::new()
+fn auth_routes(config: &RateLimitConfig) -> Router {
+    let router = Router::new()
         .route("/auth/register", routing::post(handlers::register))
         .route("/auth/login", routing::post(handlers::login))
-        .route("/auth/refresh", routing::post(handlers::auth::refresh_token))
         .route(
-            "/auth/verify-email",
-            routing::post(handlers::verify_email),
+            "/auth/refresh",
+            routing::post(handlers::auth::refresh_token),
         )
+        .route("/auth/verify-email", routing::post(handlers::verify_email))
         .route(
             "/auth/forgot-password",
             routing::post(handlers::auth::forgot_password),
@@ -43,20 +40,14 @@ fn auth_routes() -> Router {
         .route(
             "/auth/reset-password",
             routing::post(handlers::auth::reset_password),
-        )
-        .layer(GovernorLayer::new(governor_conf))
+        );
+
+    with_optional_rate_limit(router, config.enabled, config.auth)
 }
 
 /// Public read routes: all public GETs + search.
-/// Rate limit: 30 req/s, burst 60.
-fn public_read_routes() -> Router {
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_second(30)
-        .burst_size(60)
-        .finish()
-        .unwrap();
-
-    Router::new()
+fn public_read_routes(config: &RateLimitConfig) -> Router {
+    let router = Router::new()
         // Users
         .route(
             "/users/{username}",
@@ -92,20 +83,14 @@ fn public_read_routes() -> Router {
         .route(
             "/users/{id}/following",
             routing::get(handlers::follow::list_following),
-        )
-        .layer(GovernorLayer::new(governor_conf))
+        );
+
+    with_optional_rate_limit(router, config.enabled, config.public_read)
 }
 
 /// Protected routes: all authenticated writes.
-/// Rate limit: 10 req/s, burst 20.
-fn protected_routes() -> Router {
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_second(10)
-        .burst_size(20)
-        .finish()
-        .unwrap();
-
-    Router::new()
+fn protected_routes(config: &RateLimitConfig) -> Router {
+    let router = Router::new()
         // Auth
         .route("/auth/me", routing::get(handlers::get_current_user))
         .route("/auth/logout", routing::post(handlers::auth::logout))
@@ -113,10 +98,7 @@ fn protected_routes() -> Router {
             "/auth/profile",
             routing::put(handlers::user::update_profile),
         )
-        .route(
-            "/auth/password",
-            routing::put(handlers::change_password),
-        )
+        .route("/auth/password", routing::put(handlers::change_password))
         .route(
             "/auth/resend-verification",
             routing::post(handlers::resend_verification),
@@ -226,6 +208,21 @@ fn protected_routes() -> Router {
         .route(
             "/admin/tags/{id}",
             routing::put(handlers::tag::update_tag).delete(handlers::tag::delete_tag),
-        )
-        .layer(GovernorLayer::new(governor_conf))
+        );
+
+    with_optional_rate_limit(router, config.enabled, config.protected)
+}
+
+fn with_optional_rate_limit(router: Router, enabled: bool, rule: RateLimitRule) -> Router {
+    if !enabled {
+        return router;
+    }
+
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(rule.per_second)
+        .burst_size(rule.burst_size)
+        .finish()
+        .expect("Invalid rate limit configuration");
+
+    router.layer(GovernorLayer::new(governor_conf))
 }

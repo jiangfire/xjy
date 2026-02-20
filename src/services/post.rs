@@ -100,7 +100,11 @@ impl PostService {
         let posts = PostModel::find_by_statement(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
             &search_sql,
-            vec![forum_id.into(), (per_page as i64).into(), (offset as i64).into()],
+            vec![
+                forum_id.into(),
+                (per_page as i64).into(),
+                (offset as i64).into(),
+            ],
         ))
         .all(&self.db)
         .await?;

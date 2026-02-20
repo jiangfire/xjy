@@ -64,4 +64,3 @@ pub async fn create_pow_challenge(
         expires_at: challenge.expires_at,
     }))
 }
-

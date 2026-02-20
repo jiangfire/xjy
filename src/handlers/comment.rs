@@ -112,9 +112,12 @@ impl utoipa::PartialSchema for CommentTreeNode {
                 .property("downvotes", i32::schema())
                 .property("created_at", String::schema())
                 .property("updated_at", String::schema())
-                .property("children", utoipa::openapi::schema::ArrayBuilder::new()
-                    .items(utoipa::openapi::Ref::from_schema_name("CommentTreeNode"))
-                    .build())
+                .property(
+                    "children",
+                    utoipa::openapi::schema::ArrayBuilder::new()
+                        .items(utoipa::openapi::Ref::from_schema_name("CommentTreeNode"))
+                        .build(),
+                )
                 .required("id")
                 .required("post_id")
                 .required("user_id")

@@ -68,9 +68,9 @@ impl UploadService {
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
         let dir = Path::new(&config.upload_dir).join(subdirectory);
 
-        fs::create_dir_all(&dir)
-            .await
-            .map_err(|e| AppError::Validation(format!("Failed to create upload directory: {}", e)))?;
+        fs::create_dir_all(&dir).await.map_err(|e| {
+            AppError::Validation(format!("Failed to create upload directory: {}", e))
+        })?;
 
         let file_path = dir.join(&filename);
         fs::write(&file_path, data)

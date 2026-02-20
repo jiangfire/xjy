@@ -5,11 +5,16 @@ use crate::models::UserModel;
 use crate::response::ApiResponse;
 use crate::services::auth::AuthService;
 use crate::services::email::EmailService;
-use axum::{response::IntoResponse, Extension, Json};
+use anyhow::anyhow;
+use axum::{
+    http::{header, HeaderMap, HeaderValue},
+    response::{IntoResponse, Response},
+    Extension, Json,
+};
 use sea_orm::DatabaseConnection;
 use serde::{Deserialize, Serialize};
-use validator::Validate;
 use utoipa::ToSchema;
+use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct RegisterRequest {
@@ -113,7 +118,12 @@ pub async fn register(
 
     let service = AuthService::new(db);
     let (user, access_token, refresh_token) = service
-        .register(&payload.username, &payload.email, &payload.password, &email_service)
+        .register(
+            &payload.username,
+            &payload.email,
+            &payload.password,
+            &email_service,
+        )
         .await?;
 
     let auth_config = crate::config::auth::AuthConfig::from_env();
@@ -124,14 +134,16 @@ pub async fn register(
     };
 
     let response = RegisterResponse {
-        token: access_token,
-        refresh_token,
+        token: access_token.clone(),
+        refresh_token: refresh_token.clone(),
         user_id: user.id,
         username: user.username,
         message,
     };
 
-    Ok(ApiResponse::ok(response))
+    let mut http_response = ApiResponse::ok(response).into_response();
+    set_auth_cookies(&mut http_response, &access_token, &refresh_token)?;
+    Ok(http_response)
 }
 
 #[utoipa::path(
@@ -150,16 +162,19 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> AppResult<impl IntoResponse> {
     let service = AuthService::new(db);
-    let (user, access_token, refresh_token) = service.login(&payload.username, &payload.password).await?;
+    let (user, access_token, refresh_token) =
+        service.login(&payload.username, &payload.password).await?;
 
     let response = AuthResponse {
-        token: access_token,
-        refresh_token,
+        token: access_token.clone(),
+        refresh_token: refresh_token.clone(),
         user_id: user.id,
         username: user.username,
     };
 
-    Ok(ApiResponse::ok(response))
+    let mut http_response = ApiResponse::ok(response).into_response();
+    set_auth_cookies(&mut http_response, &access_token, &refresh_token)?;
+    Ok(http_response)
 }
 
 #[utoipa::path(
@@ -351,7 +366,7 @@ pub async fn reset_password(
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshTokenRequest {
     /// Refresh token
-    pub refresh_token: String,
+    pub refresh_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -374,10 +389,21 @@ pub struct TokenResponse {
 )]
 pub async fn refresh_token(
     Extension(db): Extension<DatabaseConnection>,
-    Json(payload): Json<RefreshTokenRequest>,
+    headers: HeaderMap,
+    payload: Option<Json<RefreshTokenRequest>>,
 ) -> AppResult<impl IntoResponse> {
+    let refresh_token = payload
+        .and_then(|Json(body)| body.refresh_token)
+        .or_else(|| {
+            crate::utils::cookie::extract_cookie(
+                &headers,
+                crate::utils::cookie::REFRESH_TOKEN_COOKIE,
+            )
+        })
+        .ok_or(AppError::Unauthorized)?;
+
     // Decode the refresh token
-    let claims = crate::utils::jwt::decode_jwt(&payload.refresh_token)?;
+    let claims = crate::utils::jwt::decode_jwt(&refresh_token)?;
 
     // Verify it's a refresh token
     if !crate::utils::jwt::is_refresh_token(&claims) {
@@ -397,11 +423,13 @@ pub async fn refresh_token(
     let new_refresh_token = crate::utils::jwt::encode_refresh_token(&user_id_str)?;
 
     let response = TokenResponse {
-        token: new_access_token,
-        refresh_token: new_refresh_token,
+        token: new_access_token.clone(),
+        refresh_token: new_refresh_token.clone(),
     };
 
-    Ok(ApiResponse::ok(response))
+    let mut http_response = ApiResponse::ok(response).into_response();
+    set_auth_cookies(&mut http_response, &new_access_token, &new_refresh_token)?;
+    Ok(http_response)
 }
 
 #[utoipa::path(
@@ -414,5 +442,48 @@ pub async fn refresh_token(
     tag = "auth"
 )]
 pub async fn logout() -> AppResult<impl IntoResponse> {
-    Ok(ApiResponse::ok("Logout successful"))
+    let mut response = ApiResponse::ok("Logout successful").into_response();
+    clear_auth_cookies(&mut response)?;
+    Ok(response)
+}
+
+fn set_auth_cookies(
+    response: &mut Response,
+    access_token: &str,
+    refresh_token: &str,
+) -> AppResult<()> {
+    let access_cookie = crate::utils::cookie::build_auth_cookie(
+        crate::utils::cookie::ACCESS_TOKEN_COOKIE,
+        access_token,
+        crate::utils::jwt::access_token_expiry_seconds(),
+    );
+    let refresh_cookie = crate::utils::cookie::build_auth_cookie(
+        crate::utils::cookie::REFRESH_TOKEN_COOKIE,
+        refresh_token,
+        crate::utils::jwt::refresh_token_expiry_seconds(),
+    );
+
+    append_set_cookie(response, &access_cookie)?;
+    append_set_cookie(response, &refresh_cookie)?;
+    Ok(())
+}
+
+fn clear_auth_cookies(response: &mut Response) -> AppResult<()> {
+    append_set_cookie(
+        response,
+        &crate::utils::cookie::build_clear_cookie(crate::utils::cookie::ACCESS_TOKEN_COOKIE),
+    )?;
+    append_set_cookie(
+        response,
+        &crate::utils::cookie::build_clear_cookie(crate::utils::cookie::REFRESH_TOKEN_COOKIE),
+    )?;
+    Ok(())
+}
+
+fn append_set_cookie(response: &mut Response, cookie_value: &str) -> AppResult<()> {
+    let value = HeaderValue::from_str(cookie_value).map_err(|e| {
+        AppError::Internal(anyhow!("Failed to build Set-Cookie header value: {}", e))
+    })?;
+    response.headers_mut().append(header::SET_COOKIE, value);
+    Ok(())
 }

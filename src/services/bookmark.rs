@@ -33,9 +33,7 @@ impl BookmarkService {
             .await?;
 
         if let Some(existing) = existing {
-            Bookmark::delete_by_id(existing.id)
-                .exec(&self.db)
-                .await?;
+            Bookmark::delete_by_id(existing.id).exec(&self.db).await?;
             Ok(false)
         } else {
             let now = chrono::Utc::now().naive_utc();

@@ -202,8 +202,11 @@ async fn change_comment_vote() {
     // Note: API might not support vote removal (value: 0)
     // Returns 400 if vote removal not supported
     let status = resp.status();
-    assert!(status == 200 || status == 400,
-            "Expected 200 or 400 for vote removal, got {}", status);
+    assert!(
+        status == 200 || status == 400,
+        "Expected 200 or 400 for vote removal, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -257,8 +260,11 @@ async fn remove_comment_vote() {
     // Note: API might not support vote removal (value: 0)
     // Returns 400 if vote removal not supported
     let status = resp.status();
-    assert!(status == 200 || status == 400,
-            "Expected 200 or 400 for vote removal, got {}", status);
+    assert!(
+        status == 200 || status == 400,
+        "Expected 200 or 400 for vote removal, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -280,7 +286,11 @@ async fn vote_on_nonexistent_comment_returns_404() {
         .unwrap();
 
     // 优先会被 PoW/参数校验拦下（与实现顺序有关）
-    assert!(resp.status().as_u16() == 404 || resp.status().as_u16() == 400 || resp.status().as_u16() == 422);
+    assert!(
+        resp.status().as_u16() == 404
+            || resp.status().as_u16() == 400
+            || resp.status().as_u16() == 422
+    );
 }
 
 #[tokio::test]
@@ -414,7 +424,10 @@ async fn comment_vote_counter_consistency() {
     let body: Value = resp.json().await.unwrap();
     let comments = body["data"].as_array().unwrap();
 
-    if let Some(comment) = comments.iter().find(|c| c["id"].as_i64() == Some(comment_id)) {
+    if let Some(comment) = comments
+        .iter()
+        .find(|c| c["id"].as_i64() == Some(comment_id))
+    {
         // Vote count should be 3 - 2 = 1
         // Note: API may not properly calculate vote_count in comment listings
         let vote_count = comment["vote_count"].as_i64().unwrap_or(0);
@@ -425,9 +438,13 @@ async fn comment_vote_counter_consistency() {
         let calculated_count = upvotes - downvotes;
 
         // Accept either correct count or 0 (known API issue)
-        assert!(vote_count == 1 || calculated_count == 1 || vote_count == 0,
-                "Expected vote_count of 1, got {} (upvotes: {}, downvotes: {})",
-                vote_count, upvotes, downvotes);
+        assert!(
+            vote_count == 1 || calculated_count == 1 || vote_count == 0,
+            "Expected vote_count of 1, got {} (upvotes: {}, downvotes: {})",
+            vote_count,
+            upvotes,
+            downvotes
+        );
     }
 }
 
@@ -538,7 +555,10 @@ async fn multiple_votes_same_user_only_last_counts() {
     let body: Value = resp.json().await.unwrap();
     let comments = body["data"].as_array().unwrap();
 
-    if let Some(comment) = comments.iter().find(|c| c["id"].as_i64() == Some(comment_id)) {
+    if let Some(comment) = comments
+        .iter()
+        .find(|c| c["id"].as_i64() == Some(comment_id))
+    {
         // Final vote should be -1 (downvote)
         // Note: API may not properly calculate vote_count
         let vote_count = comment["vote_count"].as_i64().unwrap_or(0);
@@ -549,8 +569,12 @@ async fn multiple_votes_same_user_only_last_counts() {
         let calculated_count = upvotes - downvotes;
 
         // Accept correct count, 0 (known API issue), or just that downvotes > 0
-        assert!(vote_count == -1 || calculated_count == -1 || vote_count == 0 || downvotes > 0,
-                "Expected vote_count of -1, got {} (upvotes: {}, downvotes: {})",
-                vote_count, upvotes, downvotes);
+        assert!(
+            vote_count == -1 || calculated_count == -1 || vote_count == 0 || downvotes > 0,
+            "Expected vote_count of -1, got {} (upvotes: {}, downvotes: {})",
+            vote_count,
+            upvotes,
+            downvotes
+        );
     }
 }

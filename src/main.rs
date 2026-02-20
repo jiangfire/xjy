@@ -10,7 +10,10 @@ mod services;
 mod utils;
 mod websocket;
 
-use axum::{extract::Extension, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    extract::Extension, middleware as axum_middleware, response::IntoResponse, routing::get, Json,
+    Router,
+};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use sea_orm_migration::MigratorTrait;
 use serde_json::json;
@@ -311,7 +314,7 @@ fn build_cors_layer() -> CorsLayer {
             .split(',')
             .filter_map(|s| s.trim().parse().ok())
             .collect();
-        cors.allow_origin(origins)
+        cors.allow_origin(origins).allow_credentials(true)
     }
 }
 
@@ -323,6 +326,9 @@ fn create_app(upload_dir: &str) -> Router {
         .nest_service("/uploads", ServeDir::new(upload_dir))
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
+        .layer(axum_middleware::from_fn(
+            crate::middleware::security::security_headers_middleware,
+        ))
 }
 
 #[utoipa::path(
@@ -332,9 +338,7 @@ fn create_app(upload_dir: &str) -> Router {
         (status = 200, description = "Health check successful", body = serde_json::Value)
     )
 )]
-async fn health_check(
-    Extension(db): Extension<DatabaseConnection>,
-) -> impl IntoResponse {
+async fn health_check(Extension(db): Extension<DatabaseConnection>) -> impl IntoResponse {
     let db_ok = db
         .query_one(Statement::from_string(
             sea_orm::DatabaseBackend::Postgres,

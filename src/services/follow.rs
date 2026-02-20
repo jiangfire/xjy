@@ -37,9 +37,7 @@ impl FollowService {
             .await?;
 
         if let Some(existing) = existing {
-            Follow::delete_by_id(existing.id)
-                .exec(&self.db)
-                .await?;
+            Follow::delete_by_id(existing.id).exec(&self.db).await?;
             Ok(false)
         } else {
             let now = chrono::Utc::now().naive_utc();

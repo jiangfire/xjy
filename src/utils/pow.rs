@@ -37,9 +37,7 @@ impl PowConfig {
             .filter(|value| !value.trim().is_empty())
             .or_else(|| std::env::var("JWT_SECRET").ok())
             .ok_or_else(|| {
-                AppError::Internal(anyhow::anyhow!(
-                    "POW_SECRET or JWT_SECRET must be set"
-                ))
+                AppError::Internal(anyhow::anyhow!("POW_SECRET or JWT_SECRET must be set"))
             })?;
 
         let ttl_seconds: i64 = std::env::var("POW_TTL_SECONDS")
@@ -82,8 +80,7 @@ pub fn generate_salt() -> String {
 
 pub fn sign_challenge(secret: &[u8], challenge: &PowChallenge) -> AppResult<String> {
     let payload = serde_json::to_vec(challenge).map_err(|e| AppError::Internal(e.into()))?;
-    let mut mac =
-        HmacSha256::new_from_slice(secret).map_err(|e| AppError::Internal(e.into()))?;
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|e| AppError::Internal(e.into()))?;
     mac.update(&payload);
     let sig = mac.finalize().into_bytes();
     Ok(format!(
@@ -105,8 +102,7 @@ pub fn verify_and_decode_challenge(secret: &[u8], token: &str) -> AppResult<PowC
         .decode(sig_b64)
         .map_err(|_| AppError::Validation("Invalid pow_token".to_string()))?;
 
-    let mut mac =
-        HmacSha256::new_from_slice(secret).map_err(|e| AppError::Internal(e.into()))?;
+    let mut mac = HmacSha256::new_from_slice(secret).map_err(|e| AppError::Internal(e.into()))?;
     mac.update(&payload);
     mac.verify_slice(&sig)
         .map_err(|_| AppError::Validation("Invalid pow_token signature".to_string()))?;

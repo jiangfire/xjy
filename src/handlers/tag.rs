@@ -111,7 +111,9 @@ pub async fn create_tag(
     auth_user: AuthUser,
     Json(payload): Json<CreateTagRequest>,
 ) -> AppResult<impl IntoResponse> {
-    payload.validate().map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
+    payload
+        .validate()
+        .map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
     require_admin(&db, &auth_user).await?;
 
     let service = TagService::new(db);
@@ -145,7 +147,9 @@ pub async fn update_tag(
     Path(id): Path<i32>,
     Json(payload): Json<UpdateTagRequest>,
 ) -> AppResult<impl IntoResponse> {
-    payload.validate().map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
+    payload
+        .validate()
+        .map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
     require_admin(&db, &auth_user).await?;
 
     let service = TagService::new(db);

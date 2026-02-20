@@ -197,7 +197,11 @@ async fn comment_on_locked_post_fails() {
     // Note: API doesn't actually prevent comments on locked posts
     // This is a known implementation issue
     let status = resp.status();
-    assert!(status == 400 || status == 200, "Expected 400 or 200, got {}", status);
+    assert!(
+        status == 400 || status == 200,
+        "Expected 400 or 200, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -346,12 +350,7 @@ async fn search_posts() {
 async fn search_posts_empty_query() {
     let app = common::spawn_app().await;
 
-    let resp = app
-        .client
-        .get(app.url("/search?q="))
-        .send()
-        .await
-        .unwrap();
+    let resp = app.client.get(app.url("/search?q=")).send().await.unwrap();
 
     // Should return empty results or bad request
     assert!(resp.status() == 200 || resp.status() == 400);
@@ -430,7 +429,10 @@ async fn search_posts_with_pagination() {
     // Note: Pagination might not be implemented, so just verify we got results
     assert!(results.len() > 0);
     if results.len() > 5 {
-        eprintln!("Warning: Expected <= 5 results due to limit=5, got {}", results.len());
+        eprintln!(
+            "Warning: Expected <= 5 results due to limit=5, got {}",
+            results.len()
+        );
     }
 }
 
@@ -456,8 +458,11 @@ async fn upload_avatar() {
     // May succeed if upload endpoint works, or return implementation-specific status
     // This test checks that the endpoint exists and is authenticated
     let status = resp.status();
-    assert!(status == 200 || status == 415 || status == 500 || status == 404 || status == 400,
-            "Expected 200, 415, 500, 404, or 400, got {}", status);
+    assert!(
+        status == 200 || status == 415 || status == 500 || status == 404 || status == 400,
+        "Expected 200, 415, 500, 404, or 400, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -494,8 +499,11 @@ async fn upload_image() {
 
     // Endpoint should exist and require auth
     let status = resp.status();
-    assert!(status == 200 || status == 415 || status == 500 || status == 404 || status == 400,
-            "Expected 200, 415, 500, 404, or 400, got {}", status);
+    assert!(
+        status == 200 || status == 415 || status == 500 || status == 404 || status == 400,
+        "Expected 200, 415, 500, 404, or 400, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -557,7 +565,10 @@ async fn pinned_posts_appear_first_in_listings() {
 
     // If endpoint doesn't exist or returns error, that's OK - pin/unpin already tested above
     if status == 404 || status == 400 {
-        eprintln!("Warning: Forum posts listing endpoint not found or not working (status: {})", status);
+        eprintln!(
+            "Warning: Forum posts listing endpoint not found or not working (status: {})",
+            status
+        );
         return; // Skip rest of test
     }
 

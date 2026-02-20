@@ -2,7 +2,7 @@ use crate::error::{AppError, AppResult};
 use crate::models::{post_tag, tag, PostModel, Tag, TagModel};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
-    FromQueryResult, ModelTrait, QueryFilter, QueryOrder, Statement, Set,
+    FromQueryResult, ModelTrait, QueryFilter, QueryOrder, Set, Statement,
 };
 
 pub struct TagService {
@@ -191,7 +191,11 @@ impl TagService {
                 WHERE pt.tag_id = $1 AND p.is_hidden = FALSE \
                 ORDER BY p.created_at DESC \
                 LIMIT $2 OFFSET $3",
-            vec![tag.id.into(), (per_page as i64).into(), (offset as i64).into()],
+            vec![
+                tag.id.into(),
+                (per_page as i64).into(),
+                (offset as i64).into(),
+            ],
         ))
         .all(&self.db)
         .await?;
@@ -201,9 +205,15 @@ impl TagService {
 
     pub async fn create_tag(&self, name: &str) -> AppResult<TagModel> {
         let name = name.trim().to_lowercase();
-        let slug = name.chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect::<String>();
+        let slug = name
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect::<String>();
 
-        let existing = Tag::find().filter(tag::Column::Slug.eq(&slug)).one(&self.db).await?;
+        let existing = Tag::find()
+            .filter(tag::Column::Slug.eq(&slug))
+            .one(&self.db)
+            .await?;
         if existing.is_some() {
             return Err(AppError::Conflict("Tag already exists".to_string()));
         }
@@ -219,9 +229,15 @@ impl TagService {
     }
 
     pub async fn update_tag(&self, id: i32, name: &str) -> AppResult<TagModel> {
-        let tag = Tag::find_by_id(id).one(&self.db).await?.ok_or(AppError::NotFound)?;
+        let tag = Tag::find_by_id(id)
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
         let name = name.trim().to_lowercase();
-        let slug = name.chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect::<String>();
+        let slug = name
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect::<String>();
 
         let mut active: tag::ActiveModel = tag.into();
         active.name = Set(name);
@@ -230,7 +246,10 @@ impl TagService {
     }
 
     pub async fn delete_tag(&self, id: i32) -> AppResult<()> {
-        let tag = Tag::find_by_id(id).one(&self.db).await?.ok_or(AppError::NotFound)?;
+        let tag = Tag::find_by_id(id)
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
         tag.delete(&self.db).await?;
         Ok(())
     }

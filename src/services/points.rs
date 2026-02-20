@@ -119,4 +119,3 @@ impl PointsService {
         Ok(entries.len() as i64)
     }
 }
-

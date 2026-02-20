@@ -64,7 +64,9 @@ async fn list_all_users() {
     let body: Value = resp.json().await.unwrap();
     assert!(body["success"].as_bool().unwrap());
     // Paginated response has structure: { data: { items: [...], total, page, per_page } }
-    let users = body["data"]["items"].as_array().expect("Expected items array in paginated response");
+    let users = body["data"]["items"]
+        .as_array()
+        .expect("Expected items array in paginated response");
     assert!(users.len() >= 5);
 }
 
@@ -90,7 +92,9 @@ async fn list_users_pagination() {
         .unwrap();
 
     let body: Value = resp.json().await.unwrap();
-    let page1 = body["data"]["items"].as_array().expect("Expected items in page 1");
+    let page1 = body["data"]["items"]
+        .as_array()
+        .expect("Expected items in page 1");
     assert_eq!(page1.len(), 5);
 
     // Second page
@@ -103,7 +107,9 @@ async fn list_users_pagination() {
         .unwrap();
 
     let body: Value = resp.json().await.unwrap();
-    let page2 = body["data"]["items"].as_array().expect("Expected items in page 2");
+    let page2 = body["data"]["items"]
+        .as_array()
+        .expect("Expected items in page 2");
     assert!(page2.len() > 0);
 }
 

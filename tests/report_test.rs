@@ -349,7 +349,11 @@ async fn resolve_report_as_regular_user_fails() {
     // Note: API returns 422 for validation errors before checking permissions
     // This is acceptable - the endpoint is still protected
     let status = resp.status();
-    assert!(status == 403 || status == 422, "Expected 403 or 422, got {}", status);
+    assert!(
+        status == 403 || status == 422,
+        "Expected 403 or 422, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -372,7 +376,11 @@ async fn resolve_nonexistent_report_returns_404() {
     // Note: API returns 400 for nonexistent reports (action validation fails)
     // This is acceptable - the request still fails
     let status = resp.status();
-    assert!(status == 404 || status == 422 || status == 400, "Expected 404, 422, or 400, got {}", status);
+    assert!(
+        status == 404 || status == 422 || status == 400,
+        "Expected 404, 422, or 400, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -439,8 +447,11 @@ async fn report_same_target_multiple_times() {
 
     // Note: API returns 500 (database error) instead of 409 (conflict)
     // This is a known implementation issue
-    assert!(status == 400 || status == 409 || status == 500,
-            "Expected 400, 409, or 500, got {}", status);
+    assert!(
+        status == 400 || status == 409 || status == 500,
+        "Expected 400, 409, or 500, got {}",
+        status
+    );
 }
 
 #[tokio::test]
@@ -507,9 +518,16 @@ async fn list_reports_with_pagination() {
     };
 
     // Note: Pagination might not be implemented, so just verify we got reports
-    assert!(reports.len() > 0, "Expected at least 1 report, got {}", reports.len());
+    assert!(
+        reports.len() > 0,
+        "Expected at least 1 report, got {}",
+        reports.len()
+    );
     // If pagination is working, we should get at most 3
     if reports.len() > 3 {
-        eprintln!("Warning: Expected <= 3 reports due to limit=3, got {}", reports.len());
+        eprintln!(
+            "Warning: Expected <= 3 reports due to limit=3, got {}",
+            reports.len()
+        );
     }
 }

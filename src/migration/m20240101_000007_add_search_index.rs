@@ -18,8 +18,10 @@ impl MigrationTrait for Migration {
         .await?;
 
         // Create GIN index for fast full-text search
-        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_posts_search ON posts USING GIN (search_vector)")
-            .await?;
+        db.execute_unprepared(
+            "CREATE INDEX IF NOT EXISTS idx_posts_search ON posts USING GIN (search_vector)",
+        )
+        .await?;
 
         Ok(())
     }

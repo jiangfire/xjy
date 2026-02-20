@@ -4,8 +4,8 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct JwtConfig {
     pub secret: String,
-    pub access_token_expiry: u64,   // 15 minutes
-    pub refresh_token_expiry: u64,   // 7 days
+    pub access_token_expiry: u64,  // 15 minutes
+    pub refresh_token_expiry: u64, // 7 days
 }
 
 impl JwtConfig {
@@ -14,9 +14,7 @@ impl JwtConfig {
             .map_err(|_| anyhow::anyhow!("JWT_SECRET environment variable must be set"))?;
 
         if secret.len() < 32 {
-            return Err(anyhow::anyhow!(
-                "JWT_SECRET must be at least 32 characters"
-            ));
+            return Err(anyhow::anyhow!("JWT_SECRET must be at least 32 characters"));
         }
 
         let access_token_expiry = env::var("JWT_ACCESS_EXPIRATION")

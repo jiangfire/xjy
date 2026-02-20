@@ -145,7 +145,9 @@ pub async fn list_posts(
     let sort = params.sort.as_deref().unwrap_or("new");
 
     let service = PostService::new(db.clone());
-    let (posts, total) = service.list_by_forum(forum_id, page, per_page, sort).await?;
+    let (posts, total) = service
+        .list_by_forum(forum_id, page, per_page, sort)
+        .await?;
 
     // Batch-fetch tags for all posts in the page
     let post_ids: Vec<i32> = posts.iter().map(|p| p.id).collect();
@@ -248,7 +250,10 @@ pub async fn create_post(
         tag_service.set_post_tags(post.id, tag_ids).await?;
     }
 
-    Ok(ApiResponse::ok(PostResponse::with_tags(post, response_tags)))
+    Ok(ApiResponse::ok(PostResponse::with_tags(
+        post,
+        response_tags,
+    )))
 }
 
 #[utoipa::path(
@@ -404,7 +409,9 @@ pub async fn search_posts(
     let sort = params.sort.as_deref().unwrap_or("relevance");
 
     let service = PostService::new(db);
-    let (posts, total) = service.search(q, params.forum_id, page, per_page, sort).await?;
+    let (posts, total) = service
+        .search(q, params.forum_id, page, per_page, sort)
+        .await?;
     let items = posts.into_iter().map(PostResponse::from).collect();
 
     Ok(ApiResponse::ok(PaginatedResponse::new(

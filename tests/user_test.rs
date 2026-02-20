@@ -107,19 +107,17 @@ async fn get_current_user() {
     assert_eq!(body["data"]["id"].as_i64().unwrap() as i32, user_id);
     // Username now has counter suffix, just verify it starts with the prefix
     let username = body["data"]["username"].as_str().unwrap();
-    assert!(username.starts_with("currentuser"), "Username should start with 'currentuser'");
+    assert!(
+        username.starts_with("currentuser"),
+        "Username should start with 'currentuser'"
+    );
 }
 
 #[tokio::test]
 async fn get_current_user_requires_auth() {
     let app = common::spawn_app().await;
 
-    let resp = app
-        .client
-        .get(app.url("/auth/me"))
-        .send()
-        .await
-        .unwrap();
+    let resp = app.client.get(app.url("/auth/me")).send().await.unwrap();
 
     assert_eq!(resp.status(), 401);
 }
@@ -197,8 +195,11 @@ async fn refresh_invalid_token_fails() {
     // Note: API returns 500 for invalid tokens - should be 401 or 400
     // This is a known implementation issue
     let status = resp.status();
-    assert!(status == 401 || status == 400 || status == 500,
-            "Expected error status for invalid refresh token, got {}", status);
+    assert!(
+        status == 401 || status == 400 || status == 500,
+        "Expected error status for invalid refresh token, got {}",
+        status
+    );
 }
 
 #[tokio::test]

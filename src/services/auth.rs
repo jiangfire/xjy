@@ -40,13 +40,14 @@ impl AuthService {
 
         let password_hash = hash_password(password)?;
         let now = chrono::Utc::now().naive_utc();
-        let (email_verified, verification_token, verification_expires) = if self.config.require_email_verification {
-            let token = uuid::Uuid::new_v4().to_string();
-            let expires = now + chrono::Duration::hours(24);
-            (false, Some(token), Some(expires))
-        } else {
-            (true, None, None)
-        };
+        let (email_verified, verification_token, verification_expires) =
+            if self.config.require_email_verification {
+                let token = uuid::Uuid::new_v4().to_string();
+                let expires = now + chrono::Duration::hours(24);
+                (false, Some(token), Some(expires))
+            } else {
+                (true, None, None)
+            };
 
         let new_user = crate::models::user::ActiveModel {
             username: sea_orm::ActiveValue::Set(username.to_string()),
@@ -69,7 +70,10 @@ impl AuthService {
         if self.config.require_email_verification {
             if let Some(token) = verification_token {
                 // Send verification email (non-fatal)
-                if let Err(e) = email_service.send_verification_email(&user.email, &token).await {
+                if let Err(e) = email_service
+                    .send_verification_email(&user.email, &token)
+                    .await
+                {
                     tracing::warn!("Failed to send verification email: {e}");
                 }
             }

@@ -7,7 +7,10 @@ fn get_notifications(body: &Value) -> Vec<Value> {
     if body["data"].is_array() {
         body["data"].as_array().cloned().unwrap_or_default()
     } else if body["data"]["items"].is_array() {
-        body["data"]["items"].as_array().cloned().unwrap_or_default()
+        body["data"]["items"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
     } else {
         vec![]
     }

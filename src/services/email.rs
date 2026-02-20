@@ -19,8 +19,7 @@ impl EmailService {
     pub fn from_env() -> Self {
         match EmailConfig::from_env() {
             Some(cfg) => {
-                let creds =
-                    Credentials::new(cfg.smtp_username.clone(), cfg.smtp_password.clone());
+                let creds = Credentials::new(cfg.smtp_username.clone(), cfg.smtp_password.clone());
                 let transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&cfg.smtp_host)
                     .map(|builder| builder.port(cfg.smtp_port).credentials(creds).build());
 
@@ -92,9 +91,12 @@ impl EmailService {
             None => return Ok(()),
         };
 
-        let from_mailbox: Mailbox = from_address.parse().map_err(|e: lettre::address::AddressError| {
-            anyhow::anyhow!("Invalid from address '{}': {}", from_address, e)
-        })?;
+        let from_mailbox: Mailbox =
+            from_address
+                .parse()
+                .map_err(|e: lettre::address::AddressError| {
+                    anyhow::anyhow!("Invalid from address '{}': {}", from_address, e)
+                })?;
         let to_mailbox: Mailbox = to.parse().map_err(|e: lettre::address::AddressError| {
             anyhow::anyhow!("Invalid to address '{}': {}", to, e)
         })?;

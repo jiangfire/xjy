@@ -1,3 +1,4 @@
+pub mod cookie;
 pub mod jwt;
 pub mod markdown;
 pub mod password;

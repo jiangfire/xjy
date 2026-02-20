@@ -21,8 +21,8 @@ impl EmailConfig {
             .unwrap_or(587);
         let smtp_username = env::var("SMTP_USERNAME").ok()?;
         let smtp_password = env::var("SMTP_PASSWORD").ok()?;
-        let from_address = env::var("SMTP_FROM")
-            .unwrap_or_else(|_| format!("Forum <{}>", smtp_username.clone()));
+        let from_address =
+            env::var("SMTP_FROM").unwrap_or_else(|_| format!("Forum <{}>", smtp_username.clone()));
         let frontend_url =
             env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 

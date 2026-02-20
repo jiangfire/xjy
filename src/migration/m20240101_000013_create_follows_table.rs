@@ -24,11 +24,15 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
-        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)")
-            .await?;
+        db.execute_unprepared(
+            "CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)",
+        )
+        .await?;
 
-        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)")
-            .await?;
+        db.execute_unprepared(
+            "CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)",
+        )
+        .await?;
 
         Ok(())
     }

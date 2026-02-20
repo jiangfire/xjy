@@ -37,12 +37,28 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(UserPointsLedger::UserId).integer().not_null())
+                    .col(
+                        ColumnDef::new(UserPointsLedger::UserId)
+                            .integer()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(UserPointsLedger::Delta).integer().not_null())
-                    .col(ColumnDef::new(UserPointsLedger::Reason).string_len(64).not_null())
-                    .col(ColumnDef::new(UserPointsLedger::RefType).string_len(20).not_null())
+                    .col(
+                        ColumnDef::new(UserPointsLedger::Reason)
+                            .string_len(64)
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserPointsLedger::RefType)
+                            .string_len(20)
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(UserPointsLedger::RefId).integer().not_null())
-                    .col(ColumnDef::new(UserPointsLedger::ActorUserId).integer().not_null())
+                    .col(
+                        ColumnDef::new(UserPointsLedger::ActorUserId)
+                            .integer()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(UserPointsLedger::CreatedAt)
                             .timestamp()
@@ -98,4 +114,3 @@ impl MigrationTrait for Migration {
             .await
     }
 }
-

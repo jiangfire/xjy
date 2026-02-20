@@ -19,6 +19,14 @@ fn get_config() -> &'static crate::config::jwt::JwtConfig {
         .expect("JWT config not initialized — call init_jwt_config() at startup")
 }
 
+pub fn access_token_expiry_seconds() -> u64 {
+    get_config().access_token_expiry
+}
+
+pub fn refresh_token_expiry_seconds() -> u64 {
+    get_config().refresh_token_expiry
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String, // user_id
@@ -95,7 +103,10 @@ mod tests {
 
     fn ensure_config() {
         INIT.call_once(|| {
-            std::env::set_var("JWT_SECRET", "a_very_long_secret_key_that_is_at_least_32_chars");
+            std::env::set_var(
+                "JWT_SECRET",
+                "a_very_long_secret_key_that_is_at_least_32_chars",
+            );
             let config = crate::config::jwt::JwtConfig::from_env().unwrap();
             let _ = init_jwt_config(config);
         });

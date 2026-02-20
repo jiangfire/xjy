@@ -1,4 +1,11 @@
-use crate::{error::AppError, models::User, utils::jwt::decode_jwt};
+use crate::{
+    error::AppError,
+    models::User,
+    utils::{
+        cookie::{extract_cookie, ACCESS_TOKEN_COOKIE},
+        jwt::decode_jwt,
+    },
+};
 use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Response, Extension};
 use sea_orm::{DatabaseConnection, EntityTrait};
 
@@ -18,21 +25,18 @@ pub async fn auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    // Extract Authorization header
-    let auth_header = headers
-        .get("Authorization")
-        .and_then(|h| h.to_str().ok())
+    // Prefer Authorization: Bearer, fallback to HttpOnly cookie.
+    let token = extract_bearer_token(&headers)
+        .or_else(|| extract_cookie(&headers, ACCESS_TOKEN_COOKIE))
         .ok_or(AppError::Unauthorized)?;
 
-    // Parse Bearer token
-    if !auth_header.starts_with("Bearer ") {
+    // Verify JWT
+    let claims = decode_jwt(&token)?;
+
+    // Access routes must use access token (not refresh token).
+    if !crate::utils::jwt::is_access_token(&claims) {
         return Err(AppError::Unauthorized);
     }
-
-    let token = &auth_header[7..]; // Skip "Bearer "
-
-    // Verify JWT
-    let claims = decode_jwt(token)?;
 
     // Check user is not banned
     let user_id: i32 = claims
@@ -57,6 +61,19 @@ pub async fn auth_middleware(
 
     // Continue to next handler
     Ok(next.run(request).await)
+}
+
+fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
+    let auth_header = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())?;
+
+    let token = auth_header.strip_prefix("Bearer ")?;
+    if token.is_empty() {
+        None
+    } else {
+        Some(token.to_string())
+    }
 }
 
 /// Parse user_id from AuthUser string to i32

@@ -325,7 +325,10 @@ async fn report_and_moderation_workflow() {
     // Accept 200 (success) or 404 (endpoint doesn't exist)
     let delete_status = resp.status();
     if delete_status != 200 && delete_status != 404 {
-        eprintln!("Warning: Unexpected status from admin delete: {}", delete_status);
+        eprintln!(
+            "Warning: Unexpected status from admin delete: {}",
+            delete_status
+        );
     }
 
     // If delete failed, skip verification
@@ -543,8 +546,11 @@ async fn cascade_deletion_verification() {
     // Note: API might not properly delete posts or cascade
     // Accept 404 (correct) or 200 (known issue)
     let status = resp.status();
-    assert!(status == 404 || status == 200,
-            "Expected post to be deleted (404) or still exist (200), got {}", status);
+    assert!(
+        status == 404 || status == 200,
+        "Expected post to be deleted (404) or still exist (200), got {}",
+        status
+    );
 
     // If post still exists, skip cascade checks
     if status == 200 {
@@ -563,8 +569,11 @@ async fn cascade_deletion_verification() {
     // Note: Cascade might not work properly
     // Accept 404 (correct) or 200 (known issue)
     let status = resp.status();
-    assert!(status == 404 || status == 200,
-            "Expected comments to be deleted (404) or still exist (200), got {}", status);
+    assert!(
+        status == 404 || status == 200,
+        "Expected comments to be deleted (404) or still exist (200), got {}",
+        status
+    );
 
     // If comments still exist, skip remaining cascade checks
     if status == 200 {
@@ -606,7 +615,8 @@ async fn admin_management_workflow() {
     let body: Value = resp.json().await.unwrap();
 
     // API returns total_users not users
-    let _initial_users = body["data"]["total_users"].as_i64()
+    let _initial_users = body["data"]["total_users"]
+        .as_i64()
         .or_else(|| body["data"]["users"].as_i64())
         .expect("Could not get user count from stats");
 
@@ -711,7 +721,10 @@ async fn forum_posts_sorting_workflow() {
 
     // If endpoint doesn't work, skip this test
     if status == 404 || status == 400 {
-        eprintln!("Warning: Forum posts listing endpoint not available (status: {})", status);
+        eprintln!(
+            "Warning: Forum posts listing endpoint not available (status: {})",
+            status
+        );
         eprintln!("Skipping forum posts sorting test");
         return;
     }
@@ -793,12 +806,7 @@ async fn tag_filtering_workflow() {
         .unwrap();
 
     // List all tags
-    let resp = app
-        .client
-        .get(app.url("/tags"))
-        .send()
-        .await
-        .unwrap();
+    let resp = app.client.get(app.url("/tags")).send().await.unwrap();
 
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
@@ -941,7 +949,10 @@ async fn pagination_workflow() {
 
     // If endpoint doesn't work, skip pagination test
     if status == 404 || status == 400 {
-        eprintln!("Warning: Forum posts listing endpoint not available (status: {})", status);
+        eprintln!(
+            "Warning: Forum posts listing endpoint not available (status: {})",
+            status
+        );
         eprintln!("Skipping pagination test");
         return;
     }
@@ -958,7 +969,11 @@ async fn pagination_workflow() {
         panic!("Unexpected response structure: {}", body);
     };
 
-    assert!(page1.len() <= 10, "Expected <= 10 posts on first page, got {}", page1.len());
+    assert!(
+        page1.len() <= 10,
+        "Expected <= 10 posts on first page, got {}",
+        page1.len()
+    );
 
     // Get second page
     let resp = app
@@ -1057,6 +1072,9 @@ async fn logout_workflow() {
 
     // Note: API doesn't invalidate tokens on logout (known security issue)
     let status = resp.status();
-    assert!(status == 401 || status == 200,
-            "Expected 401 or 200 after logout, got {}", status);
+    assert!(
+        status == 401 || status == 200,
+        "Expected 401 or 200 after logout, got {}",
+        status
+    );
 }

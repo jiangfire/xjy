@@ -22,9 +22,34 @@ pub fn render_markdown(raw: &str) -> String {
 
 fn sanitize_html(html: &str) -> String {
     let extra_tags: HashSet<&str> = [
-        "h1", "h2", "h3", "h4", "h5", "h6", "pre", "code", "blockquote", "hr", "table", "thead",
-        "tbody", "tfoot", "tr", "th", "td", "img", "input", "del", "s", "details", "summary",
-        "sup", "sub", "dd", "dl", "dt",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "pre",
+        "code",
+        "blockquote",
+        "hr",
+        "table",
+        "thead",
+        "tbody",
+        "tfoot",
+        "tr",
+        "th",
+        "td",
+        "img",
+        "input",
+        "del",
+        "s",
+        "details",
+        "summary",
+        "sup",
+        "sub",
+        "dd",
+        "dl",
+        "dt",
     ]
     .iter()
     .copied()

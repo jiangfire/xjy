@@ -80,6 +80,8 @@ cp .env.example .env
 | `UPLOAD_DIR` | 否 | 上传目录，默认 `./uploads` |
 | `REDIS_URL` | 否 | Redis 连接串 |
 | `CORS_ORIGINS` | 否 | 允许来源，`*` 或逗号分隔 |
+| `RATE_LIMIT_ENABLED` | 否 | 是否开启限流，默认 `true` |
+| `RATE_LIMIT_CONFIG` | 否 | 限流参数：`10:20`（全局）或 `auth=5:10,public=30:60,protected=10:20`（分组） |
 | `REQUIRE_EMAIL_VERIFICATION` | 否 | 是否强制邮箱验证，默认 `false` |
 | `POW_SECRET` | 否 | PoW 签名密钥（建议显式配置） |
 | `POW_TTL_SECONDS` | 否 | PoW 有效期秒数，默认 `120` |
@@ -88,8 +90,17 @@ cp .env.example .env
 | `DB_MIN_CONNECTIONS` | 否 | 连接池最小连接数，默认 `2` |
 | `SMTP_*` | 否 | 邮件发送配置 |
 | `BOOTSTRAP_ADMIN_*` | 否 | 启动时自动创建管理员 |
+| `AUTH_COOKIE_SECURE` | 否 | 认证 cookie 是否仅 HTTPS 发送，默认 `false` |
+| `AUTH_COOKIE_SAMESITE` | 否 | 认证 cookie SameSite，支持 `Lax/Strict/None`，默认 `Lax` |
+| `AUTH_COOKIE_DOMAIN` | 否 | 认证 cookie Domain（不填则为当前域） |
+| `CSP_POLICY` | 否 | CSP 响应头策略（不填使用内置默认） |
+| `ENABLE_HSTS` | 否 | 是否下发 HSTS 头，默认 `true` |
 
 注意：代码读取的是 `JWT_ACCESS_EXPIRATION`；如果只设置 `JWT_EXPIRATION`，会使用默认值。
+
+认证说明：登录/注册/刷新成功后会下发 `HttpOnly` 的 `access_token` 和 `refresh_token` cookie；鉴权同时兼容 `Authorization: Bearer <token>`。
+
+跨域 cookie 说明：前端需使用 `credentials: 'include'`，并将 `CORS_ORIGINS` 配置为明确域名（不能是 `*`）。
 
 ### 3. 创建数据库
 
@@ -316,6 +327,15 @@ Authorization: Bearer <access_token>
 - 认证路由：`5 req/s`（burst `10`）
 - 公共读取路由：`30 req/s`（burst `60`）
 - 需认证写入路由：`10 req/s`（burst `20`）
+
+可通过 `.env` 调整：
+
+```env
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_CONFIG=auth=5:10,public=30:60,protected=10:20
+# 或全局统一：
+# RATE_LIMIT_CONFIG=10:20
+```
 
 ## 开发与测试
 

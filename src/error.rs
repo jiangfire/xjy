@@ -79,10 +79,9 @@ impl IntoResponse for AppError {
                     "Internal server error".to_string(),
                 )
             }
-            AppError::PayloadTooLarge => (
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "File too large".to_string(),
-            ),
+            AppError::PayloadTooLarge => {
+                (StatusCode::PAYLOAD_TOO_LARGE, "File too large".to_string())
+            }
         };
 
         let body = json!({

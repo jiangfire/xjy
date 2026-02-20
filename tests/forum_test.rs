@@ -155,12 +155,7 @@ async fn list_forums() {
     }
 
     // List forums
-    let resp = app
-        .client
-        .get(app.url("/forums"))
-        .send()
-        .await
-        .unwrap();
+    let resp = app.client.get(app.url("/forums")).send().await.unwrap();
 
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
@@ -274,6 +269,9 @@ async fn create_duplicate_slug_fails() {
     // Currently returns 500 due to unhandled database constraint violation
     // TODO: Fix implementation to return 409 Conflict with proper error message
     let status = resp.status();
-    assert!(status == 400 || status == 409 || status == 500,
-            "Expected duplicate slug to fail, got status: {}", status);
+    assert!(
+        status == 400 || status == 409 || status == 500,
+        "Expected duplicate slug to fail, got status: {}",
+        status
+    );
 }

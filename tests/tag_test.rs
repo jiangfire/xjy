@@ -38,12 +38,7 @@ async fn create_post_with_tags_and_list_tags() {
     assert_eq!(tags.len(), 3);
 
     // List all tags
-    let resp = app
-        .client
-        .get(app.url("/tags"))
-        .send()
-        .await
-        .unwrap();
+    let resp = app.client.get(app.url("/tags")).send().await.unwrap();
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     let tags = body["data"].as_array().unwrap();

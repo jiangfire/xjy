@@ -23,8 +23,10 @@ impl MigrationTrait for Migration {
         )
         .await?;
 
-        db.execute_unprepared("CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)")
-            .await?;
+        db.execute_unprepared(
+            "CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)",
+        )
+        .await?;
 
         Ok(())
     }
