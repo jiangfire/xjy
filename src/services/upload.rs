@@ -8,7 +8,7 @@ pub struct UploadConfig {
     pub upload_dir: String,
 }
 
-const MAX_FILE_SIZE: usize = 5 * 1024 * 1024; // 5 MB
+pub const MAX_FILE_SIZE: usize = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_CONTENT_TYPES: &[&str] = &["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 /// Validate file magic bytes match the declared content type.

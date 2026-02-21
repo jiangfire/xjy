@@ -173,7 +173,9 @@ fn protected_routes(config: &RateLimitConfig) -> Router {
         // Bookmarks
         .route(
             "/posts/{id}/bookmark",
-            routing::post(handlers::bookmark::toggle_bookmark),
+            routing::put(handlers::bookmark::add_bookmark)
+                .delete(handlers::bookmark::remove_bookmark)
+                .post(handlers::bookmark::toggle_bookmark),
         )
         .route(
             "/bookmarks",
@@ -182,7 +184,9 @@ fn protected_routes(config: &RateLimitConfig) -> Router {
         // Follow
         .route(
             "/users/{id}/follow",
-            routing::post(handlers::follow::toggle_follow),
+            routing::put(handlers::follow::follow_user)
+                .delete(handlers::follow::unfollow_user)
+                .post(handlers::follow::toggle_follow),
         )
         // Upload
         .route(

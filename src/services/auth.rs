@@ -1,12 +1,13 @@
 use crate::{
     config::auth::AuthConfig,
     error::{AppError, AppResult},
-    models::User,
+    models::{refresh_token, RefreshToken, User},
     services::email::EmailService,
     utils::{encode_access_token, encode_refresh_token, hash_password, verify_password},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait,
+    PaginatorTrait, QueryFilter, TransactionTrait,
 };
 
 pub struct AuthService {
@@ -64,8 +65,7 @@ impl AuthService {
         };
 
         let user = new_user.insert(&self.db).await?;
-        let access_token = encode_access_token(&user.id.to_string())?;
-        let refresh_token = encode_refresh_token(&user.id.to_string())?;
+        let (access_token, refresh_token) = self.issue_tokens_for_user(user.id).await?;
 
         if self.config.require_email_verification {
             if let Some(token) = verification_token {
@@ -101,11 +101,53 @@ impl AuthService {
             return Err(AppError::Unauthorized);
         }
 
-        // Generate JWT tokens
-        let access_token = encode_access_token(&user.id.to_string())?;
-        let refresh_token = encode_refresh_token(&user.id.to_string())?;
+        let (access_token, refresh_token) = self.issue_tokens_for_user(user.id).await?;
 
         Ok((user, access_token, refresh_token))
+    }
+
+    pub async fn rotate_refresh_token(
+        &self,
+        user_id: i32,
+        current_refresh_token: &str,
+    ) -> AppResult<(String, String)> {
+        let token_hash = crate::utils::jwt::hash_refresh_token(current_refresh_token);
+        let now = chrono::Utc::now().naive_utc();
+
+        let existing = RefreshToken::find()
+            .filter(refresh_token::Column::UserId.eq(user_id))
+            .filter(refresh_token::Column::Token.eq(token_hash))
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::Unauthorized)?;
+
+        if existing.expires_at <= now {
+            let _ = RefreshToken::delete_by_id(existing.id).exec(&self.db).await;
+            return Err(AppError::Unauthorized);
+        }
+
+        let txn = self.db.begin().await?;
+        RefreshToken::delete_by_id(existing.id).exec(&txn).await?;
+        let (access_token, refresh_token) = self.issue_tokens_for_user_txn(&txn, user_id).await?;
+        txn.commit().await?;
+        Ok((access_token, refresh_token))
+    }
+
+    pub async fn revoke_refresh_token(&self, refresh_token: &str) -> AppResult<()> {
+        let token_hash = crate::utils::jwt::hash_refresh_token(refresh_token);
+        RefreshToken::delete_many()
+            .filter(refresh_token::Column::Token.eq(token_hash))
+            .exec(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn revoke_all_user_refresh_tokens(&self, user_id: i32) -> AppResult<()> {
+        RefreshToken::delete_many()
+            .filter(refresh_token::Column::UserId.eq(user_id))
+            .exec(&self.db)
+            .await?;
+        Ok(())
     }
 
     /// Get user by ID
@@ -161,6 +203,7 @@ impl AuthService {
         active.password_hash = sea_orm::ActiveValue::Set(new_hash);
         active.updated_at = sea_orm::ActiveValue::Set(now);
         active.update(&self.db).await?;
+        self.revoke_all_user_refresh_tokens(user_id).await?;
         Ok(())
     }
 
@@ -262,6 +305,7 @@ impl AuthService {
             .one(&self.db)
             .await?
             .ok_or_else(|| AppError::Validation("Invalid reset token".to_string()))?;
+        let user_id = user.id;
 
         if let Some(expires) = user.password_reset_expires {
             if chrono::Utc::now().naive_utc() > expires {
@@ -277,7 +321,46 @@ impl AuthService {
         active.password_reset_expires = sea_orm::ActiveValue::Set(None);
         active.updated_at = sea_orm::ActiveValue::Set(now);
         active.update(&self.db).await?;
+        self.revoke_all_user_refresh_tokens(user_id).await?;
 
+        Ok(())
+    }
+
+    async fn issue_tokens_for_user(&self, user_id: i32) -> AppResult<(String, String)> {
+        self.issue_tokens_for_user_txn(&self.db, user_id).await
+    }
+
+    async fn issue_tokens_for_user_txn<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+        user_id: i32,
+    ) -> AppResult<(String, String)> {
+        let user_id_str = user_id.to_string();
+        let access_token = encode_access_token(&user_id_str)?;
+        let refresh_token = encode_refresh_token(&user_id_str)?;
+        self.persist_refresh_token(conn, user_id, &refresh_token)
+            .await?;
+        Ok((access_token, refresh_token))
+    }
+
+    async fn persist_refresh_token<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+        user_id: i32,
+        refresh_token: &str,
+    ) -> AppResult<()> {
+        let now = chrono::Utc::now().naive_utc();
+        let expires_at = now
+            + chrono::Duration::seconds(crate::utils::jwt::refresh_token_expiry_seconds() as i64);
+
+        let model = refresh_token::ActiveModel {
+            user_id: sea_orm::ActiveValue::Set(user_id),
+            token: sea_orm::ActiveValue::Set(crate::utils::jwt::hash_refresh_token(refresh_token)),
+            expires_at: sea_orm::ActiveValue::Set(expires_at),
+            created_at: sea_orm::ActiveValue::Set(now),
+            ..Default::default()
+        };
+        model.insert(conn).await?;
         Ok(())
     }
 }

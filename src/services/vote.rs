@@ -1,14 +1,20 @@
 use crate::{
     error::{AppError, AppResult},
-    models::{vote, Comment, Post, Vote, VoteModel},
+    models::{vote, Comment, Post, Vote},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    Statement,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, Statement,
+    TransactionTrait,
 };
 
 pub struct VoteService {
     db: DatabaseConnection,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VoteChange {
+    pub old_value: i16,
+    pub new_value: i16,
 }
 
 impl VoteService {
@@ -16,16 +22,18 @@ impl VoteService {
         Self { db }
     }
 
-    pub async fn vote(
+    /// Set vote state to -1 / 0 / 1.
+    /// 0 means remove current vote.
+    pub async fn set_vote(
         &self,
         user_id: i32,
         target_type: &str,
         target_id: i32,
         value: i16,
-    ) -> AppResult<VoteModel> {
-        if value != 1 && value != -1 {
+    ) -> AppResult<VoteChange> {
+        if value != 1 && value != -1 && value != 0 {
             return Err(AppError::Validation(
-                "Vote value must be 1 or -1".to_string(),
+                "Vote value must be -1, 0 or 1".to_string(),
             ));
         }
 
@@ -46,64 +54,59 @@ impl VoteService {
             _ => return Err(AppError::Validation("Invalid target type".to_string())),
         }
 
-        // Check for existing vote
-        let existing = Vote::find()
+        let txn = self.db.begin().await?;
+
+        // Read previous value in the same transaction to compute exact counter delta.
+        let old_value = Vote::find()
             .filter(vote::Column::UserId.eq(user_id))
             .filter(vote::Column::TargetType.eq(target_type))
             .filter(vote::Column::TargetId.eq(target_id))
-            .one(&self.db)
-            .await?;
+            .one(&txn)
+            .await?
+            .map(|v| v.value)
+            .unwrap_or(0);
 
-        let old_value: i16 = existing.as_ref().map_or(0, |v| v.value);
-
-        let result = if let Some(existing_vote) = existing {
-            if existing_vote.value == value {
-                // Same vote again — remove it (toggle off)
-                Vote::delete_by_id(existing_vote.id).exec(&self.db).await?;
-                self.update_counters(target_type, target_id, -old_value)
-                    .await?;
-                // Return a synthetic model indicating removal
-                return Ok(VoteModel {
-                    id: 0,
-                    user_id,
-                    target_type: target_type.to_string(),
-                    target_id,
-                    value: 0,
-                    created_at: chrono::Utc::now().naive_utc(),
-                });
-            }
-            // Different vote — update
-            let mut active: vote::ActiveModel = existing_vote.into();
-            active.value = sea_orm::ActiveValue::Set(value);
-            let updated = active.update(&self.db).await?;
-            // Swing counters: remove old, add new
-            self.update_counters(target_type, target_id, value - old_value)
+        if value == 0 {
+            Vote::delete_many()
+                .filter(vote::Column::UserId.eq(user_id))
+                .filter(vote::Column::TargetType.eq(target_type))
+                .filter(vote::Column::TargetId.eq(target_id))
+                .exec(&txn)
                 .await?;
-            updated
         } else {
-            // New vote
-            let now = chrono::Utc::now().naive_utc();
-            let new_vote = vote::ActiveModel {
-                user_id: sea_orm::ActiveValue::Set(user_id),
-                target_type: sea_orm::ActiveValue::Set(target_type.to_string()),
-                target_id: sea_orm::ActiveValue::Set(target_id),
-                value: sea_orm::ActiveValue::Set(value),
-                created_at: sea_orm::ActiveValue::Set(now),
-                ..Default::default()
-            };
-            let inserted = new_vote.insert(&self.db).await?;
-            self.update_counters(target_type, target_id, value).await?;
-            inserted
-        };
+            txn.execute(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "INSERT INTO votes (user_id, target_type, target_id, value, created_at)
+                 VALUES ($1, $2, $3, $4, NOW())
+                 ON CONFLICT (user_id, target_type, target_id)
+                 DO UPDATE SET value = EXCLUDED.value",
+                vec![
+                    user_id.into(),
+                    target_type.into(),
+                    target_id.into(),
+                    value.into(),
+                ],
+            ))
+            .await?;
+        }
 
-        Ok(result)
+        self.apply_counter_delta(&txn, target_type, target_id, old_value, value)
+            .await?;
+        txn.commit().await?;
+
+        Ok(VoteChange {
+            old_value,
+            new_value: value,
+        })
     }
 
-    async fn update_counters(
+    async fn apply_counter_delta<C: ConnectionTrait>(
         &self,
+        conn: &C,
         target_type: &str,
         target_id: i32,
-        delta: i16,
+        old_value: i16,
+        new_value: i16,
     ) -> AppResult<()> {
         let table = match target_type {
             "post" => "posts",
@@ -111,40 +114,28 @@ impl VoteService {
             _ => return Ok(()),
         };
 
-        let (col_up, col_down) = if delta > 0 {
-            ("upvotes", format!("upvotes + {delta}"))
-        } else {
-            ("downvotes", format!("downvotes + {}", -delta))
-        };
+        let old_up = if old_value == 1 { 1 } else { 0 };
+        let old_down = if old_value == -1 { 1 } else { 0 };
+        let new_up = if new_value == 1 { 1 } else { 0 };
+        let new_down = if new_value == -1 { 1 } else { 0 };
 
-        // For vote swing (e.g. -1 to +1, delta=2), handle both columns
-        if delta.abs() > 1 {
-            // Swing: delta=2 means +1 upvote, -1 downvote; delta=-2 means reverse
-            let sql = if delta > 0 {
-                format!(
-                    "UPDATE {table} SET upvotes = upvotes + 1, downvotes = GREATEST(downvotes - 1, 0) WHERE id = $1"
-                )
-            } else {
-                format!(
-                    "UPDATE {table} SET downvotes = downvotes + 1, upvotes = GREATEST(upvotes - 1, 0) WHERE id = $1"
-                )
-            };
-            self.db
-                .execute(Statement::from_sql_and_values(
-                    sea_orm::DatabaseBackend::Postgres,
-                    &sql,
-                    [target_id.into()],
-                ))
-                .await?;
-        } else {
-            let sql = format!("UPDATE {table} SET {col_up} = {col_down} WHERE id = $1");
-            self.db
-                .execute(Statement::from_sql_and_values(
-                    sea_orm::DatabaseBackend::Postgres,
-                    &sql,
-                    [target_id.into()],
-                ))
-                .await?;
+        let delta_up = new_up - old_up;
+        let delta_down = new_down - old_down;
+
+        if delta_up != 0 || delta_down != 0 {
+            let sql = format!(
+                "UPDATE {table}
+                 SET upvotes = GREATEST(upvotes + $1, 0),
+                     downvotes = GREATEST(downvotes + $2, 0)
+                 WHERE id = $3"
+            );
+
+            conn.execute(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                &sql,
+                vec![delta_up.into(), delta_down.into(), target_id.into()],
+            ))
+            .await?;
         }
 
         Ok(())
@@ -178,11 +169,11 @@ mod tests {
     }
 
     #[test]
-    fn toggle_same_vote_returns_zero() {
+    fn set_same_vote_is_idempotent() {
         let old_value: i16 = 1;
         let new_value: i16 = 1;
-        let result = if old_value == new_value { 0 } else { new_value };
-        assert_eq!(result, 0);
+        let delta_up = (new_value == 1) as i32 - (old_value == 1) as i32;
+        assert_eq!(delta_up, 0);
     }
 
     #[test]

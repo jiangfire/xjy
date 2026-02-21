@@ -2,6 +2,7 @@ use crate::{
     error::{AppError, AppResult},
     models::{user, user_points_ledger, User, UserPointsLedger},
 };
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
     TransactionTrait,
@@ -65,19 +66,17 @@ impl PointsService {
         ledger.insert(&txn).await?;
 
         // 2) 汇总到 users.karma
-        let author = User::find_by_id(author_user_id)
-            .one(&txn)
-            .await?
-            .ok_or(AppError::NotFound)?;
-
-        let mut author_active: user::ActiveModel = author.into();
-        let new_karma = author_active
-            .karma
-            .take()
-            .unwrap_or_default()
-            .saturating_add(delta_points);
-        author_active.karma = Set(new_karma);
-        author_active.update(&txn).await?;
+        let result = User::update_many()
+            .col_expr(
+                user::Column::Karma,
+                Expr::col(user::Column::Karma).add(delta_points),
+            )
+            .filter(user::Column::Id.eq(author_user_id))
+            .exec(&txn)
+            .await?;
+        if result.rows_affected == 0 {
+            return Err(AppError::NotFound);
+        }
 
         txn.commit().await?;
         Ok(())
@@ -94,18 +93,14 @@ impl PointsService {
             .await?;
 
         for e in &entries {
-            let author = User::find_by_id(e.user_id)
-                .one(&txn)
-                .await?
-                .ok_or(AppError::NotFound)?;
-            let mut author_active: user::ActiveModel = author.into();
-            let new_karma = author_active
-                .karma
-                .take()
-                .unwrap_or_default()
-                .saturating_sub(e.delta);
-            author_active.karma = Set(new_karma);
-            author_active.update(&txn).await?;
+            User::update_many()
+                .col_expr(
+                    user::Column::Karma,
+                    Expr::col(user::Column::Karma).sub(e.delta),
+                )
+                .filter(user::Column::Id.eq(e.user_id))
+                .exec(&txn)
+                .await?;
         }
 
         // 删除账本记录（也可以改为打标“rolled_back”，这里先做最小实现）

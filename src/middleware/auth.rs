@@ -31,7 +31,7 @@ pub async fn auth_middleware(
         .ok_or(AppError::Unauthorized)?;
 
     // Verify JWT
-    let claims = decode_jwt(&token)?;
+    let claims = decode_jwt(&token).map_err(|_| AppError::Unauthorized)?;
 
     // Access routes must use access token (not refresh token).
     if !crate::utils::jwt::is_access_token(&claims) {

@@ -1,5 +1,6 @@
-use ammonia::Builder;
+use ammonia::{Builder, UrlRelative};
 use comrak::{markdown_to_html, Options};
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 /// Render raw Markdown to sanitized HTML.
@@ -68,9 +69,48 @@ fn sanitize_html(html: &str) -> String {
     builder.add_tag_attributes("th", &["align"]);
 
     builder.url_schemes(url_schemes);
+    builder.url_relative(UrlRelative::Custom(Box::new(normalize_relative_url)));
     builder.link_rel(Some("noopener noreferrer"));
 
-    builder.clean(html).to_string()
+    builder
+        .clean(html)
+        .to_string()
+        .trim_end_matches('\n')
+        .to_string()
+}
+
+fn normalize_relative_url(url: &str) -> Option<Cow<'_, str>> {
+    normalize_upload_url(url, markdown_upload_base_url().as_deref())
+}
+
+fn normalize_upload_url<'a>(url: &'a str, upload_base_url: Option<&str>) -> Option<Cow<'a, str>> {
+    let normalized = url
+        .strip_prefix("./uploads/")
+        .or_else(|| url.strip_prefix("uploads/"))
+        .or_else(|| url.strip_prefix("/uploads/"));
+
+    if let Some(rest) = normalized {
+        let rest = rest.trim_start_matches('/');
+        let base = upload_base_url
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim_end_matches('/'));
+
+        let absolute = match base {
+            Some(b) => format!("{}/uploads/{}", b, rest),
+            None => format!("/uploads/{}", rest),
+        };
+        return Some(Cow::Owned(absolute));
+    }
+
+    Some(Cow::Borrowed(url))
+}
+
+fn markdown_upload_base_url() -> Option<String> {
+    std::env::var("MARKDOWN_UPLOAD_BASE_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 #[cfg(test)]
@@ -144,5 +184,41 @@ mod tests {
     fn autolink() {
         let html = render_markdown("Visit https://example.com today");
         assert!(html.contains("<a href=\"https://example.com\""));
+    }
+
+    #[test]
+    fn relative_upload_image_is_normalized_to_root_path() {
+        let html = render_markdown("![avatar](uploads/avatars/a.png)");
+        assert!(html.contains("<img src=\"/uploads/avatars/a.png\""));
+    }
+
+    #[test]
+    fn dot_relative_upload_image_is_normalized_to_root_path() {
+        let html = render_markdown("![avatar](./uploads/images/a.webp)");
+        assert!(html.contains("<img src=\"/uploads/images/a.webp\""));
+    }
+
+    #[test]
+    fn rendered_html_does_not_end_with_newline() {
+        let html = render_markdown("plain text");
+        assert!(!html.ends_with('\n'));
+    }
+
+    #[test]
+    fn root_relative_upload_image_respects_config_base_url() {
+        let normalized = normalize_upload_url("/uploads/images/a.webp", Some("https://api.example.com"));
+        assert_eq!(
+            normalized.unwrap(),
+            "https://api.example.com/uploads/images/a.webp"
+        );
+    }
+
+    #[test]
+    fn configured_base_url_trims_trailing_slash() {
+        let normalized = normalize_upload_url("uploads/images/a.webp", Some("https://api.example.com/"));
+        assert_eq!(
+            normalized.unwrap(),
+            "https://api.example.com/uploads/images/a.webp"
+        );
     }
 }

@@ -403,7 +403,8 @@ pub async fn refresh_token(
         .ok_or(AppError::Unauthorized)?;
 
     // Decode the refresh token
-    let claims = crate::utils::jwt::decode_jwt(&refresh_token)?;
+    let claims =
+        crate::utils::jwt::decode_jwt(&refresh_token).map_err(|_| AppError::Unauthorized)?;
 
     // Verify it's a refresh token
     if !crate::utils::jwt::is_refresh_token(&claims) {
@@ -411,16 +412,13 @@ pub async fn refresh_token(
     }
 
     // Get user ID from claims
-    let user_id_str = claims.sub;
-    let user_id: i32 = user_id_str.parse().map_err(|_| AppError::Unauthorized)?;
+    let user_id: i32 = claims.sub.parse().map_err(|_| AppError::Unauthorized)?;
 
-    // Verify user exists
     let service = AuthService::new(db);
-    let _user = service.get_user_by_id(user_id).await?;
-
-    // Generate new tokens
-    let new_access_token = crate::utils::jwt::encode_access_token(&user_id_str)?;
-    let new_refresh_token = crate::utils::jwt::encode_refresh_token(&user_id_str)?;
+    // Stateful rotation: old token must exist in DB and gets revoked atomically.
+    let (new_access_token, new_refresh_token) = service
+        .rotate_refresh_token(user_id, &refresh_token)
+        .await?;
 
     let response = TokenResponse {
         token: new_access_token.clone(),
@@ -441,7 +439,25 @@ pub async fn refresh_token(
     ),
     tag = "auth"
 )]
-pub async fn logout() -> AppResult<impl IntoResponse> {
+pub async fn logout(
+    Extension(db): Extension<DatabaseConnection>,
+    headers: HeaderMap,
+    payload: Option<Json<RefreshTokenRequest>>,
+) -> AppResult<impl IntoResponse> {
+    let refresh_token = payload
+        .and_then(|Json(body)| body.refresh_token)
+        .or_else(|| {
+            crate::utils::cookie::extract_cookie(
+                &headers,
+                crate::utils::cookie::REFRESH_TOKEN_COOKIE,
+            )
+        });
+
+    if let Some(token) = refresh_token {
+        let service = AuthService::new(db);
+        let _ = service.revoke_refresh_token(&token).await;
+    }
+
     let mut response = ApiResponse::ok("Logout successful").into_response();
     clear_auth_cookies(&mut response)?;
     Ok(response)

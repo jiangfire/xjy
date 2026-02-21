@@ -70,11 +70,12 @@ pub async fn vote_post(
     validate_pow_solution(&challenge, &payload.pow_nonce)?;
 
     let service = VoteService::new(db.clone());
-    let vote = service.vote(user_id, "post", id, payload.value).await?;
+    let change = service.set_vote(user_id, "post", id, payload.value).await?;
 
-    // 积分结算：只对 upvote 计分；取消/点踩不计分（最小策略，后续可扩展）
-    let points_delta = match vote.value {
-        1 => 1,
+    // 按状态迁移结算积分，确保可加可减且不被重复请求刷分。
+    let points_delta = match (change.old_value, change.new_value) {
+        (0, 1) | (-1, 1) => 1,
+        (1, 0) | (1, -1) => -1,
         _ => 0,
     };
     if points_delta != 0 {
@@ -89,7 +90,7 @@ pub async fn vote_post(
     }
 
     // Notify post author on vote (not on toggle-off)
-    if vote.value != 0 {
+    if change.new_value != 0 {
         let post_service = PostService::new(db.clone());
         if let Ok(post) = post_service.get_by_id(id).await {
             let notif = NotificationService::new(db, hub);
@@ -109,7 +110,7 @@ pub async fn vote_post(
     Ok(ApiResponse::ok(VoteResponse {
         target_type: "post".to_string(),
         target_id: id,
-        value: vote.value,
+        value: change.new_value,
     }))
 }
 
@@ -149,11 +150,14 @@ pub async fn vote_comment(
     validate_pow_solution(&challenge, &payload.pow_nonce)?;
 
     let service = VoteService::new(db.clone());
-    let vote = service.vote(user_id, "comment", id, payload.value).await?;
+    let change = service
+        .set_vote(user_id, "comment", id, payload.value)
+        .await?;
 
-    // 积分结算：只对 upvote 计分；取消/点踩不计分（最小策略，后续可扩展）
-    let points_delta = match vote.value {
-        1 => 1,
+    // 按状态迁移结算积分，确保可加可减且不被重复请求刷分。
+    let points_delta = match (change.old_value, change.new_value) {
+        (0, 1) | (-1, 1) => 1,
+        (1, 0) | (1, -1) => -1,
         _ => 0,
     };
     if points_delta != 0 {
@@ -167,7 +171,7 @@ pub async fn vote_comment(
     }
 
     // Notify comment author on vote (not on toggle-off)
-    if vote.value != 0 {
+    if change.new_value != 0 {
         let comment_service = CommentService::new(db.clone());
         if let Ok(comment) = comment_service.get_by_id(id).await {
             let notif = NotificationService::new(db, hub);
@@ -187,6 +191,6 @@ pub async fn vote_comment(
     Ok(ApiResponse::ok(VoteResponse {
         target_type: "comment".to_string(),
         target_id: id,
-        value: vote.value,
+        value: change.new_value,
     }))
 }

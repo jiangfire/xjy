@@ -1,7 +1,7 @@
 use axum::{extract::Request, http::HeaderValue, middleware::Next, response::Response};
 use std::{env, sync::OnceLock};
 
-const DEFAULT_CSP_POLICY: &str = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:";
+const DEFAULT_CSP_POLICY: &str = "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:";
 const HSTS_VALUE: &str = "max-age=31536000; includeSubDomains";
 
 #[derive(Debug, Clone)]

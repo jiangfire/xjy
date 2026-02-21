@@ -11,8 +11,8 @@ mod utils;
 mod websocket;
 
 use axum::{
-    extract::Extension, middleware as axum_middleware, response::IntoResponse, routing::get, Json,
-    Router,
+    extract::Extension, http::Request, middleware as axum_middleware, response::IntoResponse,
+    routing::get, Json, Router,
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use sea_orm_migration::MigratorTrait;
@@ -22,6 +22,8 @@ use services::upload::UploadConfig;
 use std::env;
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -81,6 +83,8 @@ use websocket::hub::NotificationHub;
         // Follow routes
         crate::handlers::follow::list_followers,
         crate::handlers::follow::list_following,
+        crate::handlers::follow::follow_user,
+        crate::handlers::follow::unfollow_user,
         crate::handlers::follow::toggle_follow,
         // Notification routes
         crate::handlers::notification::list_notifications,
@@ -88,6 +92,8 @@ use websocket::hub::NotificationHub;
         crate::handlers::notification::mark_all_read,
         crate::handlers::notification::mark_read,
         // Bookmark routes
+        crate::handlers::bookmark::add_bookmark,
+        crate::handlers::bookmark::remove_bookmark,
         crate::handlers::bookmark::toggle_bookmark,
         crate::handlers::bookmark::list_bookmarks,
         // Upload routes
@@ -305,7 +311,12 @@ fn build_cors_layer() -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::HeaderName::from_static("x-request-id"),
+            header::HeaderName::from_static("traceparent"),
+        ]);
 
     if origins_str == "*" {
         cors.allow_origin(tower_http::cors::Any)
@@ -324,7 +335,24 @@ fn create_app(upload_dir: &str) -> Router {
         .merge(routes::create_routes())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .nest_service("/uploads", ServeDir::new(upload_dir))
-        .layer(TraceLayer::new_for_http())
+        .layer(
+            TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
+                let request_id = request
+                    .headers()
+                    .get("x-request-id")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("-");
+                tracing::info_span!(
+                    "http_request",
+                    method = %request.method(),
+                    uri = %request.uri(),
+                    request_id = %request_id
+                )
+            }),
+        )
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(RequestBodyLimitLayer::new(6 * 1024 * 1024))
         .layer(build_cors_layer())
         .layer(axum_middleware::from_fn(
             crate::middleware::security::security_headers_middleware,

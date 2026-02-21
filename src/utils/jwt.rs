@@ -1,6 +1,7 @@
 use anyhow::Result;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::OnceLock;
 
 static JWT_CONFIG: OnceLock<crate::config::jwt::JwtConfig> = OnceLock::new();
@@ -82,6 +83,12 @@ pub fn decode_jwt(token: &str) -> Result<Claims> {
     )
     .map(|data| data.claims)
     .map_err(|e| anyhow::anyhow!("Failed to decode JWT: {}", e))
+}
+
+pub fn hash_refresh_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 #[allow(dead_code)]

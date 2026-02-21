@@ -3,8 +3,8 @@ use crate::{
     models::{bookmark, post, Bookmark, Post, PostModel},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, Statement,
 };
 use std::collections::HashMap;
 
@@ -15,6 +15,33 @@ pub struct BookmarkService {
 impl BookmarkService {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    pub async fn add_bookmark(&self, user_id: i32, post_id: i32) -> AppResult<bool> {
+        Post::find_by_id(post_id)
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+
+        self.db
+            .execute(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "INSERT INTO bookmarks (user_id, post_id, created_at)
+                 VALUES ($1, $2, NOW())
+                 ON CONFLICT (user_id, post_id) DO NOTHING",
+                vec![user_id.into(), post_id.into()],
+            ))
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn remove_bookmark(&self, user_id: i32, post_id: i32) -> AppResult<bool> {
+        Bookmark::delete_many()
+            .filter(bookmark::Column::UserId.eq(user_id))
+            .filter(bookmark::Column::PostId.eq(post_id))
+            .exec(&self.db)
+            .await?;
+        Ok(false)
     }
 
     /// Toggle bookmark: if exists -> delete, if not -> create.
@@ -32,19 +59,10 @@ impl BookmarkService {
             .one(&self.db)
             .await?;
 
-        if let Some(existing) = existing {
-            Bookmark::delete_by_id(existing.id).exec(&self.db).await?;
-            Ok(false)
+        if existing.is_some() {
+            self.remove_bookmark(user_id, post_id).await
         } else {
-            let now = chrono::Utc::now().naive_utc();
-            let model = bookmark::ActiveModel {
-                user_id: sea_orm::ActiveValue::Set(user_id),
-                post_id: sea_orm::ActiveValue::Set(post_id),
-                created_at: sea_orm::ActiveValue::Set(now),
-                ..Default::default()
-            };
-            model.insert(&self.db).await?;
-            Ok(true)
+            self.add_bookmark(user_id, post_id).await
         }
     }
 

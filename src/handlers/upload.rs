@@ -35,7 +35,7 @@ pub async fn upload_avatar(
 ) -> AppResult<impl IntoResponse> {
     let user_id = parse_user_id(&auth_user)?;
 
-    let field = multipart
+    let mut field = multipart
         .next_field()
         .await
         .map_err(|e| AppError::Validation(format!("Failed to read upload: {}", e)))?
@@ -46,10 +46,17 @@ pub async fn upload_avatar(
         .unwrap_or("application/octet-stream")
         .to_string();
 
-    let data = field
-        .bytes()
+    let mut data = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
         .await
-        .map_err(|e| AppError::Validation(format!("Failed to read file data: {}", e)))?;
+        .map_err(|e| AppError::Validation(format!("Failed to read file data: {}", e)))?
+    {
+        if data.len() + chunk.len() > crate::services::upload::MAX_FILE_SIZE {
+            return Err(AppError::PayloadTooLarge);
+        }
+        data.extend_from_slice(&chunk);
+    }
 
     let url = UploadService::save_file(&config, &data, &content_type, "avatars").await?;
 
@@ -77,7 +84,7 @@ pub async fn upload_image(
     _auth_user: AuthUser,
     mut multipart: Multipart,
 ) -> AppResult<impl IntoResponse> {
-    let field = multipart
+    let mut field = multipart
         .next_field()
         .await
         .map_err(|e| AppError::Validation(format!("Failed to read upload: {}", e)))?
@@ -88,10 +95,17 @@ pub async fn upload_image(
         .unwrap_or("application/octet-stream")
         .to_string();
 
-    let data = field
-        .bytes()
+    let mut data = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
         .await
-        .map_err(|e| AppError::Validation(format!("Failed to read file data: {}", e)))?;
+        .map_err(|e| AppError::Validation(format!("Failed to read file data: {}", e)))?
+    {
+        if data.len() + chunk.len() > crate::services::upload::MAX_FILE_SIZE {
+            return Err(AppError::PayloadTooLarge);
+        }
+        data.extend_from_slice(&chunk);
+    }
 
     let url = UploadService::save_file(&config, &data, &content_type, "images").await?;
 

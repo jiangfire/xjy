@@ -30,11 +30,11 @@ pub async fn ws_handler(
 
 async fn handle_socket(socket: WebSocket, user_id: i32, hub: NotificationHub) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
-    let mut rx = hub.subscribe(user_id);
+    let (conn_id, mut rx) = hub.subscribe(user_id);
 
     tracing::info!("WebSocket connected for user {}", user_id);
 
-    let send_task = tokio::spawn(async move {
+    let mut send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if ws_sender.send(Message::Text(msg.into())).await.is_err() {
                 break;
@@ -42,7 +42,7 @@ async fn handle_socket(socket: WebSocket, user_id: i32, hub: NotificationHub) {
         }
     });
 
-    let recv_task = tokio::spawn(async move {
+    let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = ws_receiver.next().await {
             if let Message::Close(_) = msg {
                 break;
@@ -51,9 +51,17 @@ async fn handle_socket(socket: WebSocket, user_id: i32, hub: NotificationHub) {
     });
 
     tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
+        _ = &mut send_task => {
+            recv_task.abort();
+        },
+        _ = &mut recv_task => {
+            send_task.abort();
+        },
     }
+
+    hub.unsubscribe(user_id, conn_id);
+    let _ = send_task.await;
+    let _ = recv_task.await;
 
     tracing::info!("WebSocket disconnected for user {}", user_id);
 }

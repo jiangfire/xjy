@@ -26,4 +26,5 @@ pub use report::{Entity as Report, Model as ReportModel};
 pub use tag::{Entity as Tag, Model as TagModel};
 pub use user::{Entity as User, Model as UserModel};
 pub use user_points_ledger::Entity as UserPointsLedger;
+#[allow(unused_imports)]
 pub use vote::{Entity as Vote, Model as VoteModel};

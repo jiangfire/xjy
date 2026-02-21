@@ -3,8 +3,8 @@ use crate::{
     models::{follow, user, Follow, User, UserModel},
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, Statement,
 };
 use std::collections::HashMap;
 
@@ -15,6 +15,41 @@ pub struct FollowService {
 impl FollowService {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    pub async fn follow(&self, follower_id: i32, following_id: i32) -> AppResult<bool> {
+        if follower_id == following_id {
+            return Err(AppError::Validation("Cannot follow yourself".to_string()));
+        }
+
+        User::find_by_id(following_id)
+            .one(&self.db)
+            .await?
+            .ok_or(AppError::NotFound)?;
+
+        self.db
+            .execute(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "INSERT INTO follows (follower_id, following_id, created_at)
+                 VALUES ($1, $2, NOW())
+                 ON CONFLICT (follower_id, following_id) DO NOTHING",
+                vec![follower_id.into(), following_id.into()],
+            ))
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn unfollow(&self, follower_id: i32, following_id: i32) -> AppResult<bool> {
+        if follower_id == following_id {
+            return Err(AppError::Validation("Cannot unfollow yourself".to_string()));
+        }
+
+        Follow::delete_many()
+            .filter(follow::Column::FollowerId.eq(follower_id))
+            .filter(follow::Column::FollowingId.eq(following_id))
+            .exec(&self.db)
+            .await?;
+        Ok(false)
     }
 
     /// Toggle follow: if exists -> unfollow, if not -> follow.
@@ -36,19 +71,10 @@ impl FollowService {
             .one(&self.db)
             .await?;
 
-        if let Some(existing) = existing {
-            Follow::delete_by_id(existing.id).exec(&self.db).await?;
-            Ok(false)
+        if existing.is_some() {
+            self.unfollow(follower_id, following_id).await
         } else {
-            let now = chrono::Utc::now().naive_utc();
-            let model = follow::ActiveModel {
-                follower_id: sea_orm::ActiveValue::Set(follower_id),
-                following_id: sea_orm::ActiveValue::Set(following_id),
-                created_at: sea_orm::ActiveValue::Set(now),
-                ..Default::default()
-            };
-            model.insert(&self.db).await?;
-            Ok(true)
+            self.follow(follower_id, following_id).await
         }
     }
 

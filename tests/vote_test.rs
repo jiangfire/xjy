@@ -106,15 +106,30 @@ async fn downvote_post() {
 }
 
 #[tokio::test]
-async fn toggle_vote_off() {
+async fn same_vote_is_idempotent() {
     let app = common::spawn_app().await;
     let (token, post_id) = setup(&app).await;
 
     // Upvote
     let _ = vote_post_with_pow(&app, &token, post_id, 1).await;
 
-    // Vote same value again -> toggle off
+    // Vote same value again -> remain upvote (idempotent set semantics)
     let resp = vote_post_with_pow(&app, &token, post_id, 1).await;
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["data"]["value"], 1);
+}
+
+#[tokio::test]
+async fn remove_vote_with_zero() {
+    let app = common::spawn_app().await;
+    let (token, post_id) = setup(&app).await;
+
+    // Upvote
+    let _ = vote_post_with_pow(&app, &token, post_id, 1).await;
+
+    // Explicitly remove vote
+    let resp = vote_post_with_pow(&app, &token, post_id, 0).await;
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body["data"]["value"], 0);

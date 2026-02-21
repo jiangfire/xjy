@@ -16,6 +16,50 @@ pub struct FollowToggleResponse {
 }
 
 #[utoipa::path(
+    put,
+    path = "/api/v1/users/{id}/follow",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "User ID to follow")),
+    responses(
+        (status = 200, description = "Followed", body = FollowToggleResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "follows"
+)]
+pub async fn follow_user(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(user_id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    let follower_id = parse_user_id(&auth_user)?;
+    let service = FollowService::new(db);
+    let following = service.follow(follower_id, user_id).await?;
+    Ok(ApiResponse::ok(FollowToggleResponse { following }))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{id}/follow",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "User ID to unfollow")),
+    responses(
+        (status = 200, description = "Unfollowed", body = FollowToggleResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "follows"
+)]
+pub async fn unfollow_user(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(user_id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    let follower_id = parse_user_id(&auth_user)?;
+    let service = FollowService::new(db);
+    let following = service.unfollow(follower_id, user_id).await?;
+    Ok(ApiResponse::ok(FollowToggleResponse { following }))
+}
+
+#[utoipa::path(
     post,
     path = "/api/v1/users/{id}/follow",
     security(("jwt_token" = [])),

@@ -16,6 +16,50 @@ pub struct BookmarkToggleResponse {
 }
 
 #[utoipa::path(
+    put,
+    path = "/api/v1/posts/{id}/bookmark",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Bookmarked", body = BookmarkToggleResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "bookmarks"
+)]
+pub async fn add_bookmark(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(post_id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    let user_id = parse_user_id(&auth_user)?;
+    let service = BookmarkService::new(db);
+    let bookmarked = service.add_bookmark(user_id, post_id).await?;
+    Ok(ApiResponse::ok(BookmarkToggleResponse { bookmarked }))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/posts/{id}/bookmark",
+    security(("jwt_token" = [])),
+    params(("id" = i32, Path, description = "Post ID")),
+    responses(
+        (status = 200, description = "Bookmark removed", body = BookmarkToggleResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::AppError),
+    ),
+    tag = "bookmarks"
+)]
+pub async fn remove_bookmark(
+    Extension(db): Extension<DatabaseConnection>,
+    auth_user: AuthUser,
+    Path(post_id): Path<i32>,
+) -> AppResult<impl IntoResponse> {
+    let user_id = parse_user_id(&auth_user)?;
+    let service = BookmarkService::new(db);
+    let bookmarked = service.remove_bookmark(user_id, post_id).await?;
+    Ok(ApiResponse::ok(BookmarkToggleResponse { bookmarked }))
+}
+
+#[utoipa::path(
     post,
     path = "/api/v1/posts/{id}/bookmark",
     security(("jwt_token" = [])),

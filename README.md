@@ -78,6 +78,7 @@ cp .env.example .env
 | `HOST` | 否 | 监听地址，默认 `127.0.0.1` |
 | `PORT` | 否 | 监听端口，默认 `3000` |
 | `UPLOAD_DIR` | 否 | 上传目录，默认 `./uploads` |
+| `MARKDOWN_UPLOAD_BASE_URL` | 否 | Markdown 图片相对路径前缀，默认输出 `/uploads/...`；跨域部署可设为 `https://api.example.com` |
 | `REDIS_URL` | 否 | Redis 连接串 |
 | `CORS_ORIGINS` | 否 | 允许来源，`*` 或逗号分隔 |
 | `RATE_LIMIT_ENABLED` | 否 | 是否开启限流，默认 `true` |
@@ -254,6 +255,8 @@ POST /upload/image
 ```
 
 静态访问上传文件：`GET /uploads/{subdir}/{filename}`
+
+如果前后端跨域部署，可设置 `MARKDOWN_UPLOAD_BASE_URL`，让 Markdown 中 `uploads/...` 自动改写为 `https://your-api-domain/uploads/...`。
 
 ## PoW 投票流程
 
